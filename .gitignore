@@ -1,0 +1,8 @@
+**/bin/
+**/obj/
+**/node_modules/
+**/.angular/
+**/dist/
+**/App_Data/
+.env
+*.log
