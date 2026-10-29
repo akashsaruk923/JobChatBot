@@ -58,7 +58,7 @@ public sealed class JobDiscovery(JobAgent agent, ProviderSettings config, IHttpC
                     if (!linkedIn && !naukri) continue;
                     var title = Plain(result.TryGetProperty("title", out var t) ? t.GetString() ?? "Job listing" : "Job listing");
                     var description = Plain(result.TryGetProperty("description", out var d) ? d.GetString() ?? "" : "");
-                    found.Add(new(Guid.NewGuid().ToString("N"), title[..Math.Min(200, title.Length)], "Company not provided — check listing", plan.Location, uri.AbsoluteUri, description[..Math.Min(30000, description.Length)], DateTimeOffset.UtcNow, linkedIn ? "LinkedIn" : "Naukri", "search-snippet"));
+                    found.Add(new(Guid.NewGuid().ToString("N"), title[..Math.Min(200, title.Length)], "Company not provided — check listing", "", uri.AbsoluteUri, description[..Math.Min(30000, description.Length)], DateTimeOffset.UtcNow, linkedIn ? "LinkedIn" : "Naukri", "search-snippet"));
                 }
             }
             var added = store.Update(d =>

@@ -10,6 +10,18 @@
         "Notifications__DisableSending": "true"
       },
       "launchUrl": "swagger"
+    },
+    "bot": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "launchBrowser": true,
+      "launchUrl": "swagger",
+      "applicationUrl": "http://127.0.0.1:5080",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "Notifications__DisableSending": "false",
+        "BrowserApply__Enabled": "true"
+      }
     }
   }
 }

@@ -98,6 +98,8 @@ try
     Check(catalog.All().All(w => w.Read(d => d.Notifications.Single().Status == "awaiting-configuration")), "Server pause must prevent provider calls even with valid settings and queued messages");
     settings.Clear();
     Check(!settings.Has("Ai:ApiKey") && !settings.NotificationsEnabled, "Removing settings must remove keys and disable sending");
+    count += await JobChatBot.Checks.BotChecks.Run(directory);
+    if (args.Contains("--browser")) count += await BrowserChecks.Run();
     Console.WriteLine($"PASS: {count} isolated provider/agent checks using fake HTTP responses. No external calls.");
 }
 finally { Directory.Delete(directory, true); }

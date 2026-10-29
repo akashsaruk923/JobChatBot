@@ -1,57 +1,131 @@
 # JobChat
 
-Angular **16** frontend and **.NET 10** backend, resume parser, search agent, AI client and notification worker.
+Angular **16** + **.NET 10** job search and local browser application bot. Resume extraction, search, matching, browser login/form handling, recurring runs and notifications are implemented in C#.
 
-## Workflow
+## Run on Windows
 
-1. Open **Resume & profile** and upload PDF/DOCX/TXT/Markdown, or paste resume text. Review extracted text, add the person's name, contacts, preferred role/location, then **Save & find matching jobs**. Text PDFs up to 20 pages and files up to 2 MB are supported; scanned PDFs need manual text. Files are parsed in .NET and discarded; extracted text is saved only when the profile is saved.
-2. The .NET agent uses that workspace's saved resume skills, role and location. A missing role is inferred from recognized skills when possible; otherwise enter it manually. It creates personalized LinkedIn/Naukri search links without any credentials.
-3. In **Connections**, add a **Brave Search API key** to retrieve indexed LinkedIn/Naukri listings. The app sends the role/skill/location query, not the full resume or contact fields, to Brave. Direct listing URLs are validated, deduplicated, saved and ranked. Listings may be outdated; scores based on snippets are explicitly labeled. Company names are not invented when the provider doesn't supply them. Manual job imports remain available.
-4. In chat, **Find jobs** or a message such as “Find jobs for my resume” invokes the .NET search agent. Other questions use an optional OpenAI-compatible AI provider, or an honest local guide when AI is not configured.
-5. Apply on the original website, then confirm submission on the saved job card. No application is recorded merely from clicking its URL. Duplicate confirmations do not create duplicate notifications.
-6. Add SendGrid / WhatsApp credentials and contacts; review the pending queue before enabling notification sending. Sending defaults **off**. The development launcher also enforces a server-wide sending pause. Provider acceptance is distinguished from final delivery.
+Stop the old backend first (Ctrl+C, or Shift+F5 in Visual Studio), then from the repository root:
 
-**Not implemented:** LinkedIn/Naukri automated form submission, direct platform account/API integration, verified application-status synchronization, delivery webhooks, OCR, user login, cross-device accounts or production multi-user access controls. Providing credentials in Connections does not enable automatic job applications. The `/apply` endpoint returns 409 rather than inventing success.
-
-## Workspace and credential isolation
-
-An opaque, random 256-bit **HttpOnly, SameSite=Strict** cookie identifies each browser workspace. Different browser contexts get different resumes, jobs, settings, applications and notifications. Reloading and server restart retain the same browser's data. Cookies expire after 30 days; clearing cookies loses access to that workspace. This is browser isolation, **not authenticated accounts**. People sharing a browser profile share a workspace. Use separate browser profiles/contexts for different candidates until account authentication is implemented.
-
-Workspace files live under `backend/JobChatBot.Api/App_Data/sessions/<opaque-id>/` and are ignored by Git. Credentials entered in Connections use **ASP.NET Core Data Protection** with a workspace-specific purpose. APIs return presence metadata only, never saved values. UI fields are cleared after a successful save and are not persisted in localStorage/sessionStorage. Blank fields preserve saved settings; **Remove saved settings** clears that workspace's settings and disables sending. Server environment defaults may remain available.
-
-Data Protection keys are in `App_Data/keys`; preserve them in backups together with encrypted settings. This is local server protection, not protection against a compromised server/admin. Resume and job JSON are not encrypted. The data root has owner-only permissions on Unix. Old `App_Data/workspace.json`, if present from an earlier version, is preserved but not automatically assigned to a new browser; it is never exposed to other candidates.
-
-**Development only:** the service binds to loopback. Do not publish it as a public multi-user service without authentication, authorization, HTTPS, quotas/rate limits and managed data/key storage. Do not run multiple API instances against the JSON store.
-
-## Run
-
-Tools: .NET SDK 10.0.403, Angular CLI 16.2.16, Node 18.20.8, npm 10.8.2. Angular 16 and Node 18 are end of support; retained at the user's request.
-
-```bash
-cd /workspace/JobChatBot
-. /workspace/.setup/activate.sh
-cd frontend && npm ci
-cd ..
-bash scripts/dev.sh
-```
-
-**Development launcher safety:** `scripts/dev.sh` sets `Notifications__DisableSending=true`, so no email/WhatsApp messages are sent even if workspace credentials are saved and sending is enabled. Real delivery requires a separately started backend without this pause, explicit workspace opt-in, valid providers/recipients and appropriate network access.
-
-API: internal loopback port **5080**. Frontend: **4200**, proxying `/api` to the API. `dev.sh` stops the API it starts when the frontend exits. Stop only listeners you own before restarting. Outside the cloud environment, install the pinned prerequisites; the activation file is optional.
-
-## Swagger / Windows backend startup
-
-From the repository root in a separate CMD or PowerShell terminal:
-
-```text
-cd backend/JobChatBot.Api
+```cmd
+git pull origin main
+cd backend\JobChatBot.Api
 dotnet restore
-dotnet run --launch-profile http
+dotnet run --launch-profile bot
 ```
 
-Open **http://127.0.0.1:5080/swagger**. The `http` launch profile sets Development, selects port 5080 and pauses notification sending. Visual Studio also opens Swagger when launching this profile. In Development, the API root redirects to Swagger. The OpenAPI document is `/swagger/v1/swagger.json` and includes JSON request bodies and the multipart resume upload.
+Swagger: **http://127.0.0.1:5080/swagger**.
 
-Swagger is enabled only in **Development**. `dotnet run --no-launch-profile` does not load that profile and may default to Production, so `/swagger` will return 404. Use the launch-profile command above for local development. Production API routes remain available without Swagger.
+In another terminal:
+
+```cmd
+cd C:\Users\akash\source\repos\JobChatBot\frontend
+npm ci
+npm start
+```
+
+Frontend: **http://127.0.0.1:4200**. Use the same hostname for frontend and Swagger if they should share a browser workspace.
+
+The frontend was developed/tested with Node 18.20.8 and npm 10.8.2, as required by Angular 16. If you intentionally use your installed Node 24 instead, `npm ci --engine-strict=false` bypasses the version check; Node 24 compatibility with Angular 16 is not guaranteed.
+
+Use **installed Microsoft Edge** on Windows. No Playwright browser download command is needed. `dotnet restore` installs the .NET client/driver library. A cloud/Linux backend cannot operate the Edge browser on your Windows machine.
+
+## Start once → search → match → apply
+
+1. **Resume & profile:** upload PDF/DOCX/TXT or paste text. Fill your name, email, target role/location, explicit first/last name and application phone number. The application phone is separate from WhatsApp. Review extracted text, then save. An uploaded original file is retained privately for attachment; editing extracted text stops automatic attachment of a mismatched file.
+2. **Connections:** add a **Brave Search API key**. Optional LinkedIn/Naukri login email/password can be saved here, protected by .NET Data Protection. You can also log in directly in the separate Edge window and keep that session. Never paste passwords into chat.
+3. For email/WhatsApp, add SendGrid/Meta settings and profile recipients. Check the pending queue and enable notification sending explicitly. The `bot` backend launch profile permits sending; `http` and `scripts/dev.sh` keep notification sending paused. Starting `bot` can send an already-authorized pending notification queue—review it first.
+4. **Auto-apply bot:** choose minimum match score, maximum applications per run (1–10), and repeat interval (30–1440 minutes). Naukri native-profile apply has a separate opt-in because it uses the resume and answers saved **in your Naukri account**, not JobChat's uploaded file.
+5. Check the explicit authorization for real submissions, then **Start Bot**. Each run searches indexed LinkedIn/Naukri listings, filters supported URLs/role/skill score/location text, skips previously attempted/applied listings, and processes eligible applications up to the limit. The backend must remain running; the frontend may be closed.
+6. **Stop bot** prevents subsequent jobs. A Submit already in flight may still complete. Changing the resume or connection settings stops the bot and requires fresh authorization.
+
+### What can run without per-job approval
+
+For supported **English LinkedIn Easy Apply** dialogs, the agent fills only recognized fields from the saved profile and attaches a matching uploaded resume when supported. It advances recognized Next/Review buttons and submits once under the Start Bot authorization. It does not infer salary, years of experience, work authorization, demographic information, application consent or unknown answers.
+
+For a recognized **Naukri native Apply** button, explicit Naukri opt-in permits applying with the account's existing profile/resume. Employer redirects, custom questionnaires and other layouts are not automated.
+
+**This is best-effort browser automation, not a guaranteed unattended integration for every job.** Real LinkedIn/Naukri account flows have not been tested in this environment. Sites can change layouts, require verification or restrict automation. Credentials alone do not guarantee access. No official LinkedIn/Naukri submission API is configured. Do not use this as a public production service.
+
+### Pauses and confirmation
+
+- CAPTCHA, OTP, login problems, unknown required questions, unsupported layouts and uncertain confirmation **pause** the bot. Complete verification yourself in Edge; it is never bypassed.
+- After resolving a known-field/login screen, Start Bot can resume the unfinished application under fresh authorization. If you changed your saved profile, close the old attempt and open it again.
+- An attempt can also be opened manually from an opportunity card. **Continue**, **Approve & submit once**, **Verify confirmation** and **Close browser** are available under Application attempts when the bot is stopped.
+- The final Submit transition is persisted before clicking. Concurrent/repeated requests cannot click Submit twice. Unknown results are never retried automatically.
+- An application and two notification entries are created only after a supported confirmation is observed in the same job-site browser. This is browser evidence, **not a platform API receipt** or hiring outcome.
+- For an uncertain outcome, check the original site and use Verify. If you personally verified submission, the existing **I submitted an application** action records a separately labeled user confirmation. Do not resubmit uncertain applications.
+- If you checked the original site and verified that it was **not** submitted, use **I checked: not submitted** to clear the uncertain attempt. That job remains excluded from automatic retries; starting it again requires a deliberate manual Open action.
+- Interrupted active runs are paused after a backend restart. Persistent site sessions can survive, but live pages/connections must not be assumed to survive.
+
+Indexed search snippets may be stale or incomplete. Scores represent recognized keyword overlap, not hiring probability. A specified location must appear in the saved listing title/description/location before unattended application; listings with unknown location may be skipped. Job location/company are not invented when absent from provider results.
+
+## Backend API / Swagger
+
+Swagger is enabled only in Development. `dotnet run --no-launch-profile` may default to Production and hide `/swagger`. Use `--launch-profile http` for development with notification sending paused, or `--launch-profile bot` for explicitly enabled delivery plus local browser operation.
+
+| API | Purpose |
+| --- | --- |
+| `GET /api/health`, `GET /api/workspace` | Readiness and private workspace state |
+| `PUT /api/profile`, `POST /api/resume/extract` | Profile and resume upload/extraction |
+| `GET/PUT/DELETE /api/connections` | Presence metadata / protected settings / removal |
+| `POST /api/search`, `POST /api/chat` | Resume search and optional AI guidance |
+| `GET /api/bot` | Current bot state and local browser capability |
+| `POST /api/bot/start` | Authorize recurring bounded applications |
+| `POST /api/bot/stop` | Stop subsequent applications |
+| `GET /api/automation/capabilities` | Supported browser mode and live-verification status |
+| `POST /api/jobs/{id}/apply` | Open a supported listing in the local Edge profile |
+| `GET /api/application-attempts` | Attempt states and review details |
+| `POST /api/application-attempts/{id}/continue` | Fill supported fields / resume current form |
+| `POST /api/application-attempts/{id}/submit` | One-time reviewed submission with approval + token |
+| `POST /api/application-attempts/{id}/verify` | Check visible confirmation without another submission |
+| `POST /api/application-attempts/{id}/not-submitted` | Explicitly resolve an uncertain result after checking the site |
+| `DELETE /api/application-attempts/{id}/browser` | Close that local application browser |
+| `POST /api/jobs/{id}/confirm` | Record the person's own submission confirmation |
+
+Start request example (uses the current browser cookie workspace):
+
+```json
+{
+  "authorizeSubmission": true,
+  "minimumMatchScore": 70,
+  "maxApplicationsPerRun": 3,
+  "intervalMinutes": 60,
+  "allowNaukriProfileApply": false
+}
+```
+
+Browser-launch/submission APIs accept only loopback requests. No bot is started simply by saving credentials or booting the backend. Explicit Start authorization is bound to the current profile and a unique authorization ID, so a stopped run cannot inherit authorization from a new run.
+
+## Credentials and local storage
+
+Different browser profiles/contexts use separate random HttpOnly SameSite=Strict cookie workspaces. This is **browser isolation, not authenticated user accounts**. A shared browser profile shares its workspace. Cookies last 30 days; clearing them loses workspace access. Cross-device login, managed authentication and a multi-user database remain unimplemented.
+
+Private data is in `backend/JobChatBot.Api/App_Data/sessions/<opaque-id>/` (ignored by Git): profile/job JSON, retained resume file, application attempts and a separate persistent Edge profile per login identity. Credentials use workspace-specific ASP.NET Core Data Protection. APIs return configured/unverified flags, never secret values; successful saves clear credential fields in the UI. No keys/passwords are stored in browser localStorage/sessionStorage. Blank fields preserve saved values.
+
+Preserve `App_Data/keys` together with encrypted settings in backups. Data Protection keys depend on filesystem protection; an administrator/compromised server can access them. Resume/job files and Edge session files are not encrypted by this application. The local data root is owner-only on Unix. Do not commit or share it, and do not run multiple API instances against the JSON store.
+
+Legacy `App_Data/workspace.json` is preserved without exposing it to new browser workspaces.
+
+Optional server defaults (UI per-workspace settings take precedence):
+
+| Variable | Purpose |
+| --- | --- |
+| `LinkedIn__Email`, `LinkedIn__Password` | Optional fixed-origin LinkedIn browser login |
+| `Naukri__Email`, `Naukri__Password` | Optional fixed-origin Naukri browser login |
+| `Search__BraveApiKey` | Indexed search at `api.search.brave.com` |
+| `Ai__ApiKey`, `Ai__Model` | Optional OpenAI-compatible guidance |
+| `Ai__BaseUrl` | HTTPS API base, default `https://api.openai.com/v1` |
+| `Notifications__SendGridApiKey`, `Notifications__FromEmail` | SendGrid at `api.sendgrid.com` with verified sender |
+| `Notifications__WhatsAppToken`, `Notifications__WhatsAppPhoneId` | Meta Business API at `graph.facebook.com` |
+| `Notifications__WhatsAppTemplate` | Approved template with job title, company and listing URL body parameters |
+| `Notifications__WhatsAppLanguage` | Template language, default `en_US` |
+| `Notifications__DisableSending` | Server-wide notification pause |
+| `BrowserApply__Enabled` | Enable/disable Windows installed-Edge automation |
+| `DataDirectory` | Optional absolute private data root |
+
+The `http` launch profile and `scripts/dev.sh` force notification sending **paused**. The `bot` launch profile permits provider calls only when the workspace also opts in and has configured recipients/credentials. Use recipients who consent. Pending notifications are processed every ten seconds. `provider-accepted` is not final delivery; delivery webhooks and automatic retries are not implemented. AI chat sends resume text/matches to the configured provider, with dedicated email, WhatsApp and application phone fields removed; resume text may still contain personal information.
+
+Cloud network settings must allow required provider destinations and job-site login/page dependencies. This cloud instance is not configured for live Windows site automation. No real keys/accounts were supplied and no live applications/messages were sent during development.
 
 ## Validate
 
@@ -59,36 +133,11 @@ Swagger is enabled only in **Development**. `dotnet run --no-launch-profile` doe
 dotnet build backend/JobChatBot.Api
 python3 scripts/smoke.py
 dotnet run --project backend/JobChatBot.Checks
+# Optional offline browser fixtures, using an already installed browser:
+BROWSER_TEST_EXECUTABLE=/usr/bin/chromium dotnet run --project backend/JobChatBot.Checks -- --browser
 cd frontend
 npm run build -- --configuration production
 CHROME_BIN=/usr/bin/chromium npm test -- --watch=false --karma-config karma.conf.js
 ```
 
-The HTTP suite uses temporary data and cookie jars to check isolation, profile matching, uploads, secret non-disclosure/protected storage, validation, duplicate prevention and restart persistence. Provider/agent checks use fake HTTP responses to verify provider request construction, URL filtering, deduplication, error handling, AI responses and contact exclusion. They do not submit jobs, send messages or make live provider calls. Browser tests exercise rendering, confirmation, search states and credential form clearing.
-
-## Optional configuration
-
-Use **Connections** for per-browser credential settings. Placeholders are examples only. Configured status indicates field presence, not verified provider authorization. Keys are transmitted to the .NET server; use HTTPS for any non-loopback deployment.
-
-Environment variables or .NET user-secrets provide optional server defaults:
-
-| Variable | Purpose / destination |
-| --- | --- |
-| `Search__BraveApiKey` | Brave Search API key; `api.search.brave.com` |
-| `Ai__ApiKey` | OpenAI-compatible chat provider key |
-| `Ai__Model` | Provider's model ID |
-| `Ai__BaseUrl` | HTTPS API base, default `https://api.openai.com/v1` |
-| `Notifications__SendGridApiKey` | SendGrid; `api.sendgrid.com` |
-| `Notifications__FromEmail` | Verified sender email |
-| `Notifications__WhatsAppToken` | Meta WhatsApp Business token; `graph.facebook.com` |
-| `Notifications__WhatsAppPhoneId` | Business phone-number ID |
-| `Notifications__WhatsAppTemplate` | Approved template with three body parameters: job title, company, listing URL |
-| `Notifications__WhatsAppLanguage` | Template language, default `en_US` |
-| `Notifications__DisableSending` | Server-wide pause; `dev.sh` forces `true` |
-| `DataDirectory` | Optional absolute data root |
-
-Cloud network settings must allow the destinations actually used, including the selected AI provider. The environment draft includes api.search.brave.com, api.openai.com, api.sendgrid.com and graph.facebook.com. Review/save and publish environment settings to apply the draft; live access is not verified. No real credentials were supplied. Never commit credentials or paste them into chat. No LinkedIn/Naukri passwords are requested or stored.
-
-When a workspace enables sending, its pending and `awaiting-configuration` notifications are processed every ten seconds using its own settings and recipient profile. Only send to recipients who consent. `provider-accepted` is not delivery confirmation. Ambiguous/failed sends are not automatically retried, avoiding duplicates. A crash during sending leaves `sending`; investigate the provider before recovery. Retry UI and delivery webhooks are not implemented.
-
-AI chat sends resume text and saved matches to the configured provider. Dedicated contact fields are excluded, but resume text itself may contain personal information. AI cannot submit applications or send messages. Actual provider access, live search quality and message delivery require real keys and remain unverified in this development environment.
+Tests use temporary workspaces, fake HTTP responses and locally fulfilled browser pages. They test search/credential isolation, uploads, Swagger, limits, authorization, pause/stop behavior, exact-once final clicks, changed-form rejection, receipt handling and notification creation. They **do not validate live account login, site compatibility, actual applications or provider delivery**.

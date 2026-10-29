@@ -7,7 +7,7 @@ namespace JobChatBot.Api;
 public record CredentialInput(Dictionary<string, string?> Values, bool EnableNotifications = false);
 public sealed class ProviderSettings(WorkspaceStore store, IDataProtectionProvider protection, IConfiguration server)
 {
-    public static readonly string[] Keys = ["Ai:ApiKey", "Ai:Model", "Ai:BaseUrl", "Search:BraveApiKey", "Notifications:SendGridApiKey", "Notifications:FromEmail", "Notifications:WhatsAppToken", "Notifications:WhatsAppPhoneId", "Notifications:WhatsAppTemplate", "Notifications:WhatsAppLanguage"];
+    public static readonly string[] Keys = ["LinkedIn:Email", "LinkedIn:Password", "Naukri:Email", "Naukri:Password", "Ai:ApiKey", "Ai:Model", "Ai:BaseUrl", "Search:BraveApiKey", "Notifications:SendGridApiKey", "Notifications:FromEmail", "Notifications:WhatsAppToken", "Notifications:WhatsAppPhoneId", "Notifications:WhatsAppTemplate", "Notifications:WhatsAppLanguage"];
     private static readonly ConcurrentDictionary<string, object> Gates = new();
     private object Gate => Gates.GetOrAdd(store.DirectoryPath, _ => new());
     private string PathName => Path.Combine(store.DirectoryPath, "credentials.protected");

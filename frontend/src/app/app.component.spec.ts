@@ -84,3 +84,33 @@ describe('Personalized search and connection setup', () => {
     expect(component.searchUrl('naukri')).toContain('mumbai');
   });
 });
+
+describe('Bot submission authorization', () => {
+  let http: HttpTestingController;
+  beforeEach(() => {
+    TestBed.configureTestingModule({imports:[AppComponent,HttpClientTestingModule]});
+    http=TestBed.inject(HttpTestingController);
+  });
+  afterEach(()=>http.verify());
+  it('does not start a real submission run when the person declines confirmation',async()=>{
+    spyOn(window,'confirm').and.returnValue(false);
+    const component=TestBed.createComponent(AppComponent).componentInstance;
+    component.botPolicy.authorizeSubmission=true;
+    await component.startBot();
+    http.expectNone('/api/bot/start');
+  });
+  it('sends the selected run limits only after explicit authorization',fakeAsync(()=>{
+    spyOn(window,'confirm').and.returnValue(true);
+    const component=TestBed.createComponent(AppComponent).componentInstance;
+    component.botPolicy.authorizeSubmission=true;
+    component.botPolicy.maxApplicationsPerRun=2;
+    component.startBot();
+    const start=http.expectOne('/api/bot/start');
+    expect(start.request.body.authorizeSubmission).toBeTrue();
+    expect(start.request.body.maxApplicationsPerRun).toBe(2);
+    expect(start.request.body.allowNaukriProfileApply).toBeFalse();
+    start.flush({enabled:true,status:'queued'});flushMicrotasks();
+    http.expectOne('/api/workspace').flush({profile:{},matches:[],applications:[],notifications:[],integrations:{},bot:{enabled:true,status:'queued'}});flushMicrotasks();
+    expect(component.data.bot?.status).toBe('queued');
+  }));
+});
