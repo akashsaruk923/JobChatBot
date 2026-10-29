@@ -39,6 +39,20 @@ bash scripts/dev.sh
 
 API: internal loopback port **5080**. Frontend: **4200**, proxying `/api` to the API. `dev.sh` stops the API it starts when the frontend exits. Stop only listeners you own before restarting. Outside the cloud environment, install the pinned prerequisites; the activation file is optional.
 
+## Swagger / Windows backend startup
+
+From the repository root in a separate CMD or PowerShell terminal:
+
+```text
+cd backend/JobChatBot.Api
+dotnet restore
+dotnet run --launch-profile http
+```
+
+Open **http://127.0.0.1:5080/swagger**. The `http` launch profile sets Development, selects port 5080 and pauses notification sending. Visual Studio also opens Swagger when launching this profile. In Development, the API root redirects to Swagger. The OpenAPI document is `/swagger/v1/swagger.json` and includes JSON request bodies and the multipart resume upload.
+
+Swagger is enabled only in **Development**. `dotnet run --no-launch-profile` does not load that profile and may default to Production, so `/swagger` will return 404. Use the launch-profile command above for local development. Production API routes remain available without Swagger.
+
 ## Validate
 
 ```bash

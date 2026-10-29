@@ -5,6 +5,8 @@ using Microsoft.AspNetCore.DataProtection;
 using System.Security.Cryptography;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton<WorkspaceCatalog>();
 builder.Services.AddScoped(sp => sp.GetRequiredService<WorkspaceCatalog>().Open((string)sp.GetRequiredService<IHttpContextAccessor>().HttpContext!.Items["WorkspaceId"]!));
@@ -33,6 +35,12 @@ app.Use(async (context, next) =>
     context.Response.Headers.CacheControl = "no-store";
     await next(context);
 });
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI(options => options.SwaggerEndpoint("/swagger/v1/swagger.json", "JobChat API v1"));
+    app.MapGet("/", () => Results.Redirect("/swagger")).ExcludeFromDescription();
+}
 var api = app.MapGroup("/api").AddEndpointFilter(async (context, next) =>
 {
     foreach (var argument in context.Arguments)

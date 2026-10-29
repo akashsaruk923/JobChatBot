@@ -40,7 +40,7 @@ with tempfile.TemporaryDirectory(prefix='jobchat-test-') as tmp:
     base = f'http://127.0.0.1:{port}'
     env = {k: v for k, v in os.environ.items() if not k.lower().startswith(('ai__', 'notifications__'))}
     env['DataDirectory'] = tmp
-    env['DOTNET_ENVIRONMENT'] = 'Production'
+    env['DOTNET_ENVIRONMENT'] = 'Development'
     command = ['dotnet', str(DLL), '--urls', base]
     def start():
         process = subprocess.Popen(command, cwd=tmp, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
@@ -57,6 +57,11 @@ with tempfile.TemporaryDirectory(prefix='jobchat-test-') as tmp:
         raise RuntimeError('API did not become ready')
     process = start()
     try:
+        document = request('/swagger/v1/swagger.json')
+        check('/api/profile' in document['paths'] and '/api/resume/extract' in document['paths'], 'Swagger documents profile and resume upload endpoints')
+        check('multipart/form-data' in document['paths']['/api/resume/extract']['post']['requestBody']['content'], 'Swagger supports file upload requests')
+        with opener.open(base + '/swagger/index.html') as response:
+            check(response.status == 200 and b'swagger-ui-bundle.js' in response.read(), 'Swagger UI loads in Development')
         initial = request('/api/workspace')
         check(initial['matches'] == [], 'Workspace should start empty')
         profile = dict(name='Test User', email='', whatsApp='', resumeText='Experienced Angular, C# and .NET developer with SQL.', desiredRole='Developer', location='Pune')
@@ -140,6 +145,15 @@ with tempfile.TemporaryDirectory(prefix='jobchat-test-') as tmp:
                 break
             time.sleep(.5)
         check(all(n['status'] == 'awaiting-configuration' for n in workspace['notifications']), 'Missing providers do not report messages sent')
+        process.terminate()
+        process.wait(timeout=10)
+        env['DOTNET_ENVIRONMENT'] = 'Production'
+        process = start()
+        try:
+            opener.open(base + '/swagger/v1/swagger.json')
+            check(False, 'Swagger should be absent in Production')
+        except urllib.error.HTTPError as error:
+            check(error.code == 404, 'Swagger disabled outside Development')
         print(f'PASS: {checks} HTTP and behavior checks; no external messages sent.')
     finally:
         process.terminate()
