@@ -28,7 +28,7 @@ public static class AutoApplyRun
         if (!initial.Enabled || initial.Policy is null || !initial.Policy.AuthorizeSubmission) return;
         var started = DateTimeOffset.UtcNow;
         store.Update(d => { d.Bot = d.Bot with { Status = "searching", LastRunAt = started, SubmittedThisRun = 0 }; return true; });
-        bool StillAuthorized() => store.Read(d => d.Bot.Enabled && d.Bot.AuthorizationId == initial.AuthorizationId && d.Bot.Policy?.AuthorizeSubmission == true && d.Bot.ProfileHash == AssistedApplyService.ProfileHash(d.Profile));
+        bool StillAuthorized() => !ct.IsCancellationRequested && store.Read(d => d.Bot.Enabled && d.Bot.AuthorizationId == initial.AuthorizationId && d.Bot.Policy?.AuthorizeSubmission == true && d.Bot.ProfileHash == AssistedApplyService.ProfileHash(d.Profile));
         void Pause(string message) => store.Update(d => { if (d.Bot.Enabled && d.Bot.AuthorizationId == initial.AuthorizationId) d.Bot = d.Bot with { Enabled = false, Status = "needs-user-action", Detail = message, NextRunAt = null }; return true; });
         if (!StillAuthorized()) { Pause("The saved resume/profile changed or authorization was stopped. Review it and start the bot again."); return; }
         try
@@ -36,6 +36,7 @@ public static class AutoApplyRun
             async Task<bool> Finish(ApplicationAttempt attempt)
             {
                 attempt = await steps.Prepare(attempt.Id);
+                if (attempt.Status == "already-applied") { await steps.Close(attempt.Id); return true; }
                 if (attempt.Status != "ready-to-submit" || attempt.ReviewToken is null) { Pause(attempt.Detail); return false; }
                 if (!StillAuthorized()) { Pause("Authorization changed before Submit. Nothing further was clicked."); return false; }
                 attempt = await steps.Submit(attempt.Id, attempt.ReviewToken);

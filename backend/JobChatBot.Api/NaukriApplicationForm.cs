@@ -11,6 +11,8 @@ public static class NaukriApplicationForm
     public static async Task<BrowserFormResult> Prepare(IPage page, ResumeProfile profile)
     {
         if (await BrowserApplicationForm.NeedsLogin(page)) return new("needs-user-action", "Login, OTP or CAPTCHA must be completed in Edge. No verification is bypassed.");
+        var already = page.GetByText(new Regex("^(Already applied|Applied|You have already applied (?:for|to) this job)\\.?$", RegexOptions.IgnoreCase)).Filter(new() { Visible = true });
+        if (await already.CountAsync() > 0) return new("already-applied", "Naukri shows this job was already applied to. No new application was clicked or attributed to this run.");
         var apply = Apply(page);
         if (await apply.CountAsync() != 1 || !await apply.IsVisibleAsync() || !await apply.IsEnabledAsync())
             return new("needs-user-action", "No supported Naukri native Apply button is visible. External sites and custom application questions require manual completion.");

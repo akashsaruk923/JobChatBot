@@ -44,16 +44,21 @@ internal static class BotChecks
         Reset(); store.Update(d => { d.ApplicationAttempts.Add(new("pending", "1", "submission-unknown", "", "", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow)); return true; }); steps = new(store);
         await AutoApplyRun.Run(store, steps, default);
         Check(steps.Submits == 0 && steps.Searches == 0 && !store.Read(d => d.Bot.Enabled), "Uncertain pending submission must pause before another search or submit");
+        Reset(); using var cancelled = new CancellationTokenSource();
+        steps = new FakeSteps(store) { BeforePrepare = () => cancelled.Cancel() };
+        await AutoApplyRun.Run(store, steps, cancelled.Token);
+        Check(steps.Submits == 0, "Terminal stop/cancellation during preparation prevents a new final submission click");
         return count;
     }
     private sealed class FakeSteps(WorkspaceStore store) : IAutoApplySteps
     {
         public int Submits, Searches; public bool UnknownQuestion, UncertainSubmission, StopBeforeSubmit, ReplaceAuthorization;
+        public Action? BeforePrepare;
         public List<string> Opened { get; } = [];
         public Task<DiscoveryResult> Search(CancellationToken ct) { Searches++; return Task.FromResult(new DiscoveryResult("complete", new(".NET Developer", "", [".NET"], "", "", ""), 0, "")); }
         public Match[] Rank() => store.Read(d => d.Jobs.Select(j => new Match(j, 100, [".NET"], [])).ToArray());
         public Task<ApplicationAttempt> Open(string id) { Opened.Add(id); return Task.FromResult(Attempt(id, "needs-user-action")); }
-        public Task<ApplicationAttempt> Prepare(string id) { if (ReplaceAuthorization) store.Update(d => { d.Bot = d.Bot with { AuthorizationId = "new-authorization", Enabled = true, Status = "queued" }; return true; }); if (StopBeforeSubmit) store.Update(d => { d.Bot = d.Bot with { Enabled = false }; return true; }); return Task.FromResult(Attempt(id, UnknownQuestion ? "needs-user-action" : "ready-to-submit") with { ReviewToken = "test-token" }); }
+        public Task<ApplicationAttempt> Prepare(string id) { BeforePrepare?.Invoke(); if (ReplaceAuthorization) store.Update(d => { d.Bot = d.Bot with { AuthorizationId = "new-authorization", Enabled = true, Status = "queued" }; return true; }); if (StopBeforeSubmit) store.Update(d => { d.Bot = d.Bot with { Enabled = false }; return true; }); return Task.FromResult(Attempt(id, UnknownQuestion ? "needs-user-action" : "ready-to-submit") with { ReviewToken = "test-token" }); }
         public Task<ApplicationAttempt> Submit(string id, string token) { Submits++; if (!UncertainSubmission) store.Update(d => { d.Applications.Add(new(id, id, "browser-confirmed", DateTimeOffset.UtcNow)); return true; }); return Task.FromResult(Attempt(id, UncertainSubmission ? "submission-unknown" : "submitted")); }
         public Task Close(string id) => Task.CompletedTask;
         private static ApplicationAttempt Attempt(string id, string status) => new(id, id, status, "Fixture result", "", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);

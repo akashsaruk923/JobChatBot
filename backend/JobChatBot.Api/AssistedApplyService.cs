@@ -7,7 +7,7 @@ namespace JobChatBot.Api;
 
 public sealed class AssistedApplyService(WorkspaceStore store, IApplyBrowser browser, ProviderSettings settings)
 {
-    private static readonly HashSet<string> Terminal = ["submitted", "user-confirmed", "closed", "browser-unavailable"];
+    private static readonly HashSet<string> Terminal = ["submitted", "user-confirmed", "closed", "browser-unavailable", "already-applied"];
     public static string ProfileHash(ResumeProfile profile) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(profile))));
     public static string TextHash(string text) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text)));
     public async Task<ApplicationAttempt> Open(string jobId)
@@ -103,7 +103,7 @@ public sealed class AssistedApplyService(WorkspaceStore store, IApplyBrowser bro
         {
             var attempt = Get(id);
             await browser.Close(store.DirectoryPath);
-            return attempt.Status is "submitted" or "submission-unknown" or "submitting" ? attempt : Set(id, "closed", "Application browser closed. No submission was recorded.");
+            return attempt.Status is "submitted" or "submission-unknown" or "submitting" or "already-applied" ? attempt : Set(id, "closed", "Application browser closed. No submission was recorded.");
         }
         finally { gate.Release(); }
     }

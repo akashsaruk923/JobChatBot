@@ -2,6 +2,25 @@
 
 Angular 16 + .NET 10 application for **Naukri search/apply in a visible local Edge browser** and **experience-matched public contact research from LinkedIn openings**. This workflow needs no API keys. LinkedIn apply/submit requests are disabled.
 
+## Standalone NaukriTool: no API server or Angular needed
+
+For Naukri-only automation, close any old tool instance and run from the repository:
+
+```cmd
+git pull origin main
+scripts\naukri-tool.cmd
+```
+
+Requires Windows, installed Edge and .NET SDK 10.0.403. Node/npm, API keys and the JobChat webpage are not needed. First launch asks for exact profile name, Naukri account email, local PDF/DOCX resume path (up to 2 MB), target role, location and experience. It saves private configuration in ignored `.NaukriTool/config.json`. This directory also holds the separate Edge session, applications and lock file; do not commit or share it. Use one account per directory (`--data-dir <absolute path>` selects another).
+
+Review the displayed plan and type `START` to authorize this launch. Sign in manually in the visible Edge window, verify your saved Naukri profile/answers and press Enter in the terminal. No password is stored by the tool. It immediately uploads your configured resume, saves the exact configured name if different (otherwise verifies it), and searches/applies to up to **3** eligible native Naukri jobs. It repeats the resume/name check and bounded application runs every **30 minutes** while the PC, terminal and Internet connection remain active. The same visible Edge session is reused. Notifications and LinkedIn research are not part of this standalone tool.
+
+The upload needs a fresh success signal plus name/filename verification after profile reload. It does not prove Naukri's ranking changed. Unknown layouts, login challenges, questions or unconfirmed actions pause the tool. Scheduled updates are deferred during an active application, and paused cycles do not silently restart. `RESUME` explicitly continues after you resolve a page; `SKIP` closes an unfinished pre-submit attempt. `Ctrl+C` stops. Uncertain submissions require personally checking Naukri history and choosing `CONFIRMED-APPLIED` or `NOT-SUBMITTED`; the attempted job is never automatically retried. Interrupted in-flight submissions become uncertain on restart.
+
+To change the resume/name or limits, stop the tool, edit `.NaukriTool/config.json`, then restart and review the plan. `MaxApplicationsPerCycle` accepts 1–10; `MinimumMatchScore` accepts 0–100. The interval is fixed at 30 minutes. A resume file changed mid-session requires restart/review. A private state lock prevents two instances from clicking or uploading concurrently.
+
+If paused on an unsupported page, `.NaukriTool/last-layout.json` captures tag/ID/class/type structure only—no field values, passwords, cookies or page text. It can help diagnose selector changes; it is not a complete page capture. `scripts\naukri-tool.cmd --help` prints usage. The Windows launcher and live account flows remain unverified here; browser fixture tests exercise profile writes/reloads, repeat uploads and Naukri search-to-apply, not actual Naukri compatibility.
+
 ## Start on Windows
 
 Prerequisites: installed Microsoft Edge, .NET SDK **10.0.403** (see `global.json`), Node **18.20.8** and npm **10.8.2**. No Playwright browser download is required for installed Edge.

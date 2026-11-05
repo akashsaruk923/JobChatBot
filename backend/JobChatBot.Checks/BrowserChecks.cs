@@ -57,6 +57,8 @@ internal static class BrowserChecks
         Check(await page.EvaluateAsync<int>("window.native||0") == 0, "Naukri preparation must not click Apply");
         Check(await NaukriApplicationForm.SubmitReviewed(page, profile, native.ReviewToken!), "Naukri native Apply requires reviewed token");
         Check(await NaukriApplicationForm.HasReceipt(page), "Recognized native confirmation required");
+        await page.SetContentAsync("<button disabled>Applied</button>");
+        Check((await NaukriApplicationForm.Prepare(page,profile)).Status == "already-applied", "Existing Naukri applications are skipped without another click");
         await page.SetContentAsync("<div class=success-msg>Something went wrong</div>");
         Check(!await NaukriApplicationForm.HasReceipt(page), "Error state must not be recorded as applied");
         Check(!AssistedApplyService.SupportedUrl("https://linkedin.com.evil.example/jobs/view/1"), "Reject lookalike origins");
@@ -128,6 +130,7 @@ internal static class BrowserChecks
             Check(attempt.Status == "submitted" && await page.EvaluateAsync<int>("window.naukriSubmits") == 1, "Search-to-apply flow observes a Naukri receipt with one final click");
         }
         finally { if (Directory.Exists(naukriRoot)) Directory.Delete(naukriRoot,true); }
+        checks += await NaukriProfileChecks.Run(page);
         return checks;
     }
 }

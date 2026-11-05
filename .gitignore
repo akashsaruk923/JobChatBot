@@ -6,3 +6,5 @@
 **/App_Data/
 .env
 *.log
+
+.NaukriTool/
