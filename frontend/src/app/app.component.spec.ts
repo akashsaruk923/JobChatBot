@@ -28,6 +28,13 @@ describe('JobChat workspace', () => {
     expect(component.error).toBe('Enter a valid email address.');
     expect(component.success).toBe('');
   });
+  it('explains an invalid profile instead of silently blocking save', async () => {
+    const component = TestBed.createComponent(AppComponent).componentInstance;
+    await component.saveProfile(true);
+    http.expectNone('/api/profile');
+    expect(component.error).toContain('country code');
+    expect(component.busy).toBeFalse();
+  });
   it('does not record a submission when the confirmation is declined', async () => {
     spyOn(window, 'confirm').and.returnValue(false);
     const component = TestBed.createComponent(AppComponent).componentInstance;

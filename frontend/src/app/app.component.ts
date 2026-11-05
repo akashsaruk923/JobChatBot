@@ -41,7 +41,7 @@ export class AppComponent implements OnInit {
     { key: 'Notifications:WhatsAppLanguage', label: 'Template language', placeholder: 'en_US', secret: false, group: 'WhatsApp', note: '' }
   ];
   message = ''; chatBusy = false;
-  messages = [{ role: 'assistant', text: 'Hi! Save your resume, add a job listing, and I’ll help compare your skills. Save your resume to build a personalized search. Search needs a provider key. Start Bot can authorize bounded local browser applications; challenges pause it.', mode: 'local-guide' }];
+  messages = [{ role: 'assistant', text: 'Hi! Save your resume, add a job listing, and I’ll help compare your skills. Save your resume to build a personalized search. Public LinkedIn search works without an API key. Start Bot can authorize bounded local browser applications; challenges pause it.', mode: 'local-guide' }];
   constructor(private http: HttpClient, private zone: NgZone) {}
   async ngOnInit() { await this.refresh(true); this.zone.runOutsideAngular(() => { this.botTimer = setInterval(() => { if (this.tab === 'bot' || this.data.bot?.enabled) this.zone.run(() => this.refresh()); }, 5000); }); }
   ngOnDestroy() { if (this.botTimer) clearInterval(this.botTimer); }
@@ -50,7 +50,8 @@ export class AppComponent implements OnInit {
     catch (e) { this.showError(e); } finally { this.loading = false; }
   }
   showError(e: unknown) { this.error = e instanceof HttpErrorResponse ? e.error?.error || 'Cannot reach the API. Check that the .NET service is running.' : 'Something went wrong. Please try again.'; }
-  async saveProfile() {
+  async saveProfile(invalid = false) {
+    if (invalid) { this.success = ''; this.error = 'Check the highlighted profile fields. WhatsApp is optional; leave it blank or use a country code such as +919876543210.'; return; }
     this.busy = true; this.error = ''; this.success = '';
     try { await firstValueFrom(this.http.put('/api/profile', this.profile)); await this.refresh(); this.success = 'Resume saved. Your personalized search is ready.'; this.tab = 'search'; await this.searchJobs(); }
     catch (e) { this.showError(e); } finally { this.busy = false; }
