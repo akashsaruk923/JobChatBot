@@ -147,7 +147,6 @@ api.MapPost("/bot/start", (BotPolicy input, WorkspaceStore store, IApplyBrowser 
     if (data.Bot.Enabled) return Results.Conflict(new { error = "Bot is already running. Stop it before changing policy." });
     if (string.IsNullOrWhiteSpace(data.Profile.Name) || !MailAddress.TryCreate(data.Profile.Email, out _) || string.IsNullOrWhiteSpace(data.Profile.ResumeText) || string.IsNullOrWhiteSpace(discovery.Plan(data.Profile).Role))
         return Results.BadRequest(new { error = "Save your name, valid email, resume and target role before starting." });
-    if (!settings.Has("Search:BraveApiKey")) return Results.Conflict(new { error = "Configure the Brave Search API key in Connections first. No jobs were searched or applied to." });
     if (!browser.Enabled) return Results.Conflict(new { error = "Run this backend locally on Windows with installed Edge. The cloud backend cannot use your Windows login/browser." });
     var state = store.Update(d => { d.Bot = new(true, "queued", "Authorized run queued. Search and bounded submissions start shortly. CAPTCHA/OTP or unknown questions pause the bot.", input, AssistedApplyService.ProfileHash(d.Profile), DateTimeOffset.UtcNow, AuthorizationId: Guid.NewGuid().ToString("N")); return d.Bot; });
     return Results.Ok(state);

@@ -37,7 +37,7 @@ public sealed class JobDiscovery(JobAgent agent, ProviderSettings config, IHttpC
         if (string.IsNullOrWhiteSpace(profile.ResumeText) || string.IsNullOrWhiteSpace(plan.Role))
             return new("needs-profile", plan, 0, "Save your resume and preferred role first. Search uses the saved profile for this browser workspace.");
         if (!config.Has("Search:BraveApiKey"))
-            return new("needs-credentials", plan, 0, "Add a Brave Search API key in Connections to retrieve indexed LinkedIn/Naukri listings. Personalized search links are ready to use without a key.");
+            return await KeylessJobSearch.Search(clients, store, plan, ct);
         try
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, "https://api.search.brave.com/res/v1/web/search?q=" + Uri.EscapeDataString(plan.Query) + "&count=10");

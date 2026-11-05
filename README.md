@@ -32,7 +32,7 @@ Use **installed Microsoft Edge** on Windows. No Playwright browser download comm
 ## Start once → search → match → apply
 
 1. **Resume & profile:** upload PDF/DOCX/TXT or paste text. Fill your name, email, target role/location, explicit first/last name and application phone number. The application phone is separate from WhatsApp. Review extracted text, then save. An uploaded original file is retained privately for attachment; editing extracted text stops automatic attachment of a mismatched file.
-2. **Connections:** add a **Brave Search API key**. Optional LinkedIn/Naukri login email/password can be saved here, protected by .NET Data Protection. You can also log in directly in the separate Edge window and keep that session. Never paste passwords into chat.
+2. **Connections:** No API key is required for public LinkedIn search, local skill matching or the local chat guide. An optional **Brave Search API key** adds indexed LinkedIn/Naukri search. Optional LinkedIn/Naukri login email/password can be saved here, protected by .NET Data Protection. You can also log in directly in the separate Edge window and keep that session. Never paste passwords into chat.
 3. For email/WhatsApp, add SendGrid/Meta settings and profile recipients. Check the pending queue and enable notification sending explicitly. The `bot` backend launch profile permits sending; `http` and `scripts/dev.sh` keep notification sending paused. Starting `bot` can send an already-authorized pending notification queue—review it first.
 4. **Auto-apply bot:** choose minimum match score, maximum applications per run (1–10), and repeat interval (30–1440 minutes). Naukri native-profile apply has a separate opt-in because it uses the resume and answers saved **in your Naukri account**, not JobChat's uploaded file.
 5. Check the explicit authorization for real submissions, then **Start Bot**. Each run searches indexed LinkedIn/Naukri listings, filters supported URLs/role/skill score/location text, skips previously attempted/applied listings, and processes eligible applications up to the limit. The backend must remain running; the frontend may be closed.
@@ -112,7 +112,7 @@ Optional server defaults (UI per-workspace settings take precedence):
 | --- | --- |
 | `LinkedIn__Email`, `LinkedIn__Password` | Optional fixed-origin LinkedIn browser login |
 | `Naukri__Email`, `Naukri__Password` | Optional fixed-origin Naukri browser login |
-| `Search__BraveApiKey` | Indexed search at `api.search.brave.com` |
+| `Search__BraveApiKey` | Optional indexed search at `api.search.brave.com`; without it, public LinkedIn guest search is used |
 | `Ai__ApiKey`, `Ai__Model` | Optional OpenAI-compatible guidance |
 | `Ai__BaseUrl` | HTTPS API base, default `https://api.openai.com/v1` |
 | `Notifications__SendGridApiKey`, `Notifications__FromEmail` | SendGrid at `api.sendgrid.com` with verified sender |
@@ -141,3 +141,13 @@ CHROME_BIN=/usr/bin/chromium npm test -- --watch=false --karma-config karma.conf
 ```
 
 Tests use temporary workspaces, fake HTTP responses and locally fulfilled browser pages. They test search/credential isolation, uploads, Swagger, limits, authorization, pause/stop behavior, exact-once final clicks, changed-form rejection, receipt handling and notification creation. They **do not validate live account login, site compatibility, actual applications or provider delivery**.
+
+## API-key-free workflow
+
+Save your resume, name, email, target role and location, then use **Search jobs · no key required**. Without a Brave key the backend fetches up to 25 public LinkedIn listing cards using only the target role and location. It imports real title/company/location fields, removes tracking parameters and deduplicates URLs. Matching uses card text, not full job descriptions. Naukri search is available through the personalized link; individual listings can be imported manually. Public access may be blocked, rate limited or change without notice; errors pause a bot run rather than inventing listings.
+
+The existing bounded auto-apply workflow requires **local Windows + installed Edge**, a job-site login, a completed profile and explicit Start Bot authorization, but no search API key. CAPTCHA, OTP and unknown form questions still require user action. Linux/cloud cannot operate your Windows browser. Live login and submissions have not been verified here.
+
+Local chat guidance and resume matching need no AI key. Optional AI responses, SendGrid email and WhatsApp delivery still require their respective provider credentials; these external services are not replaced by a script. Notification sending remains paused in the standard development workflow.
+
+Cloud keyless search requires network access to `www.linkedin.com`. Save/publish the environment network settings before expecting live discovery to work. Offline fixture tests validate parsing and error handling independently of site access.

@@ -71,6 +71,34 @@ try
         });
         new ProviderSettings(candidate, protection, workerConfig).Save(new(new() { ["Notifications:SendGridApiKey"] = "fake-" + person.Item1, ["Notifications:FromEmail"] = "sender@example.com" }, true));
     }
+    // Exercise the real keyless discovery path with HTTP fixtures, never live accounts.
+    var keylessStore = new WorkspaceStore(Path.Combine(directory, "keyless"));
+    keylessStore.Update(d => { d.Profile = new(ResumeText: "Python REST", DesiredRole: "Python Developer", Location: "Pune"); return true; });
+    var keylessSettings = new ProviderSettings(keylessStore, protection, new ConfigurationBuilder().Build());
+    var keylessSearch = new JobDiscovery(new JobAgent(factory, keylessSettings), keylessSettings, factory);
+    const string cards = """
+    <li><a href="https://www.linkedin.com/jobs/view/python-developer-123?trackingId=test"></a><h3 class="base-search-card__title">Python &amp; REST Developer</h3><h4 class="base-search-card__subtitle"><a>Example Company</a></h4><span class="job-search-card__location">Pune, Maharashtra</span></li>
+    <li><a href="https://linkedin.com.evil.example/jobs/view/456"></a><h3 class="base-search-card__title">Fake listing</h3></li>
+    <li><a href="https://www.linkedin.com/jobs/view/python-developer-123?trackingId=duplicate"></a><h3 class="base-search-card__title">Duplicate</h3></li>
+    """;
+    factory.Reply = request =>
+    {
+        Check(request.RequestUri!.Host == "www.linkedin.com" && request.RequestUri.AbsolutePath == "/jobs-guest/jobs/api/seeMoreJobPostings/search", "Keyless search uses public guest listings");
+        Check(!request.Headers.Contains("X-Subscription-Token") && request.Headers.Authorization is null, "Keyless search sends no API key");
+        Check(!request.RequestUri.Query.Contains("REST") && request.RequestUri.Query.Contains("Pune"), "Only target role and location are sent");
+        return new(HttpStatusCode.OK) { Content = new StringContent(cards) };
+    };
+    Check((await keylessSearch.Search(keylessStore, default)).Added == 1, "Keyless search imports only valid unique listing URLs");
+    var publicJob = keylessStore.Read(d => d.Jobs.Single());
+    Check(publicJob.Title == "Python & REST Developer" && publicJob.Company == "Example Company" && publicJob.Location == "Pune, Maharashtra", "Public listing fields are decoded and preserved");
+    Check(publicJob.DescriptionKind == "public-listing-card" && !publicJob.Url.Contains('?'), "Card provenance is explicit and tracking queries are removed");
+    Check((await keylessSearch.Search(keylessStore, default)).Added == 0, "Repeated keyless searches deduplicate saved jobs");
+    factory.Reply = _ => new(HttpStatusCode.TooManyRequests);
+    Check((await keylessSearch.Search(keylessStore, default)).Status == "provider-error", "Rate limits are surfaced without bypass or invented success");
+    factory.Reply = _ => new(HttpStatusCode.OK) { Content = new StringContent("<html>Sign in or verify</html>") };
+    Check((await keylessSearch.Search(keylessStore, default)).Status == "provider-error", "Unrecognized pages do not claim successful discovery");
+    factory.Reply = _ => new(HttpStatusCode.OK) { Content = new StringContent("") };
+    Check((await keylessSearch.Search(keylessStore, default)).Status == "complete", "Empty guest results are handled");
     var recipients = new List<string>();
     factory.Reply = request =>
     {
