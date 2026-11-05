@@ -84,6 +84,27 @@ describe('Personalized search and connection setup', () => {
     expect(component.searchResult?.status).toBe('needs-credentials');
     expect(component.data.matches.length).toBe(0);
   }));
+  it('shows results and opens an application on the search page', fakeAsync(() => {
+    const fixture = TestBed.createComponent(AppComponent);
+    fixture.detectChanges();
+    const job = {id:'regional',title:'Python Developer',company:'Example',location:'Pune',url:'https://www.linkedin.com/jobs/view/123',description:'Python'};
+    const workspace = {profile:{name:'Test',email:'',whatsApp:'',resumeText:'Python',desiredRole:'Python Developer',location:'Pune'},matches:[{job,score:100,matchedSkills:['Python'],missingSkills:[]}],applications:[],applicationAttempts:[],notifications:[],integrations:{}};
+    http.expectOne('/api/workspace').flush(workspace);
+    flushMicrotasks();
+    fixture.componentInstance.tab = 'search';
+    fixture.detectChanges(); flushMicrotasks(); fixture.detectChanges();
+    const page = fixture.nativeElement as HTMLElement;
+    expect(page.querySelectorAll('.job-card').length).toBe(1);
+    expect(page.textContent).not.toContain('Open your personalized search');
+    const apply = page.querySelector('.job-actions button') as HTMLButtonElement;
+    apply.click();
+    http.expectOne('/api/jobs/regional/apply').flush({});
+    flushMicrotasks();
+    http.expectOne('/api/workspace').flush(workspace);
+    flushMicrotasks();
+    expect(fixture.componentInstance.tab).toBe('search');
+    fixture.destroy();
+  }));
   it('uses the saved server plan for search links rather than a fixed developer role', () => {
     const component = TestBed.createComponent(AppComponent).componentInstance;
     component.data.plan = {role:'Python Developer',location:'Mumbai',skills:['Python'],query:'Python Mumbai',linkedInUrl:'https://www.linkedin.com/jobs/search/?keywords=Python',naukriUrl:'https://www.naukri.com/python-developer-jobs-in-mumbai'};

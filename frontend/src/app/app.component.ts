@@ -86,7 +86,7 @@ export class AppComponent implements OnInit {
   }
   async openApply(job: Job) {
     this.busy = true; this.error = '';
-    try { await firstValueFrom(this.http.post(`/api/jobs/${job.id}/apply`, {})); this.tab = 'bot'; await this.refresh(); }
+    try { await firstValueFrom(this.http.post(`/api/jobs/${job.id}/apply`, {})); if (this.tab !== 'search') this.tab = 'bot'; await this.refresh(); }
     catch(e) { this.showError(e); } finally { this.busy = false; }
   }
   async attemptAction(attempt: Attempt, action: string) {

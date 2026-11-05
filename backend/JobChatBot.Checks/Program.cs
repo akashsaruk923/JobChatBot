@@ -77,7 +77,9 @@ try
     var keylessSettings = new ProviderSettings(keylessStore, protection, new ConfigurationBuilder().Build());
     var keylessSearch = new JobDiscovery(new JobAgent(factory, keylessSettings), keylessSettings, factory);
     const string cards = """
-    <li><a href="https://www.linkedin.com/jobs/view/python-developer-123?trackingId=test"></a><h3 class="base-search-card__title">Python &amp; REST Developer</h3><h4 class="base-search-card__subtitle"><a>Example Company</a></h4><span class="job-search-card__location">Pune, Maharashtra</span></li>
+    <li><a href="https://in.linkedin.com/jobs/view/python-developer-123?trackingId=test"></a><h3 class="base-search-card__title">Python &amp; REST Developer</h3><h4 class="base-search-card__subtitle"><a>Example Company</a></h4><span class="job-search-card__location">Pune, Maharashtra</span></li>
+    <li><a href="https://in.linkedin.com:9443/jobs/view/invalid-port"></a><h3 class="base-search-card__title">Invalid port</h3></li>
+    <li><a href="https://in.linkedin.com.evil.example/jobs/view/fake-region"></a><h3 class="base-search-card__title">Fake region</h3></li>
     <li><a href="https://linkedin.com.evil.example/jobs/view/456"></a><h3 class="base-search-card__title">Fake listing</h3></li>
     <li><a href="https://www.linkedin.com/jobs/view/python-developer-123?trackingId=duplicate"></a><h3 class="base-search-card__title">Duplicate</h3></li>
     """;
@@ -91,6 +93,7 @@ try
     Check((await keylessSearch.Search(keylessStore, default)).Added == 1, "Keyless search imports only valid unique listing URLs");
     var publicJob = keylessStore.Read(d => d.Jobs.Single());
     Check(publicJob.Title == "Python & REST Developer" && publicJob.Company == "Example Company" && publicJob.Location == "Pune, Maharashtra", "Public listing fields are decoded and preserved");
+    Check(publicJob.Url == "https://www.linkedin.com/jobs/view/python-developer-123", "Country-host listings normalize to the supported canonical apply origin");
     Check(publicJob.DescriptionKind == "public-listing-card" && !publicJob.Url.Contains('?'), "Card provenance is explicit and tracking queries are removed");
     Check((await keylessSearch.Search(keylessStore, default)).Added == 0, "Repeated keyless searches deduplicate saved jobs");
     factory.Reply = _ => new(HttpStatusCode.TooManyRequests);

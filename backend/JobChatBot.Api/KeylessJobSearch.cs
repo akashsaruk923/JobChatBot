@@ -19,12 +19,12 @@ public static class KeylessJobSearch
             client.Timeout = TimeSpan.FromSeconds(30);
             using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
             if (!response.IsSuccessStatusCode)
-                return new("provider-error", plan, 0, $"Public LinkedIn search returned HTTP {(int)response.StatusCode}. No API key is required, but access may be restricted or rate limited. Use the search links or import a listing manually; no access checks were bypassed.");
+                return new("provider-error", plan, 0, $"Public LinkedIn search returned HTTP {(int)response.StatusCode}. No API key is required, but access may be restricted or rate limited. Try again later; no access checks were bypassed.");
             await response.Content.LoadIntoBufferAsync(2_000_000, ct);
             var html = await response.Content.ReadAsStringAsync(ct);
             var jobs = Parse(html);
             if (jobs.Length == 0 && !string.IsNullOrWhiteSpace(html))
-                return new("provider-error", plan, 0, "Public search returned no recognized job cards. The page may have changed or require verification. Use the search links or import listings manually.");
+                return new("provider-error", plan, 0, "Public search returned no recognized job cards. The page may have changed or require verification. Try again later or refine your preferred role and location.");
             var added = store.Update(d =>
             {
                 var count = 0;
@@ -32,11 +32,11 @@ public static class KeylessJobSearch
                     if (!d.Jobs.Any(j => j.Url.TrimEnd('/') == job.Url.TrimEnd('/'))) { d.Jobs.Add(job); count++; }
                 return count;
             });
-            return new("complete", plan, added, $"Added {added} public LinkedIn listings without an API key. Scores use listing-card text, not full descriptions. Naukri search remains available through its search link. Verify availability on the original site.");
+            return new("complete", plan, added, $"Added {added} public LinkedIn listings without an API key. Scores use listing-card text, not full descriptions. Verify availability on the original site.");
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or InvalidOperationException or RegexMatchTimeoutException)
         {
-            return new("provider-error", plan, 0, "Public LinkedIn search is unavailable or its response is unsupported. No API key is needed. Check network access or use search links and manual listing import.");
+            return new("provider-error", plan, 0, "Public LinkedIn search is unavailable or its response is unsupported. No API key is needed. Check network access and try again.");
         }
     }
 
@@ -46,8 +46,14 @@ public static class KeylessJobSearch
         foreach (System.Text.RegularExpressions.Match card in Regex.Matches(html, @"<li\b[^>]*>(.*?)</li\s*>", RegexOptions.Singleline | RegexOptions.IgnoreCase, RegexTimeout))
         {
             var body = card.Groups[1].Value;
-            var link = Regex.Match(body, "href\\s*=\\s*[\"'](https://(?:www\\.)?linkedin\\.com/jobs/view/[^\"']+)[\"']", RegexOptions.IgnoreCase, RegexTimeout);
-            if (!Uri.TryCreate(WebUtility.HtmlDecode(link.Groups[1].Value), UriKind.Absolute, out var uri) || !AssistedApplyService.SupportedUrl(uri.AbsoluteUri)) continue;
+            var link = Regex.Match(body, "href\\s*=\\s*[\"'](https://(?:(?:www|[a-z]{2})\\.)?linkedin\\.com/jobs/view/[^\"']+)[\"']", RegexOptions.IgnoreCase, RegexTimeout);
+            if (!Uri.TryCreate(WebUtility.HtmlDecode(link.Groups[1].Value), UriKind.Absolute, out var uri)) continue;
+            // Guest results use country hosts such as in.linkedin.com. Normalize only
+            // recognized LinkedIn origins, then retain all apply URL safety checks.
+            if (uri.Host != "linkedin.com" && uri.Host != "www.linkedin.com"
+                && !Regex.IsMatch(uri.Host, @"^[a-z]{2}\.linkedin\.com$", RegexOptions.IgnoreCase, RegexTimeout)) continue;
+            uri = new UriBuilder(uri) { Host = "www.linkedin.com" }.Uri;
+            if (!AssistedApplyService.SupportedUrl(uri.AbsoluteUri)) continue;
             var title = Field(body, "base-search-card__title");
             if (title.Length == 0) continue;
             var company = Field(body, "base-search-card__subtitle");
