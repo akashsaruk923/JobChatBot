@@ -98,6 +98,36 @@ internal static class BrowserChecks
             Check((await service.ResolveNotSubmitted(attempt.Id, new(true))).Status == "closed" && store.Read(d => d.Notifications.Count) == 0, "Resolving not-submitted creates no success or messages");
         }
         finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+        await page.UnrouteAllAsync();
+        const string naukriCards = """
+        <div class="srp-jobtuple-wrapper"><a class="title" href="https://www.naukri.com/job-listings-python-123">Python Developer</a><a class="comp-name">Example Company</a><span class="locWdth">Pune</span><span class="expwdth">3-5 Yrs</span><p>Python REST</p></div>
+        <div class="srp-jobtuple-wrapper"><a class="title" href="https://www.naukri.com/job-listings-senior-456">Python Lead</a><span class="expwdth">8-10 Yrs</span></div>
+        <div class="srp-jobtuple-wrapper"><a class="title" href="https://www.naukri.com/job-listings-unknown-789">Unknown</a></div>
+        """;
+        const string naukriApply = "<button id='apply-button' onclick=\"window.naukriSubmits=(window.naukriSubmits||0)+1;this.outerHTML='<div class=success-msg>You have successfully applied</div>'\">Apply</button>";
+        await page.RouteAsync("**/*", route => route.FulfillAsync(new() { Status = 200, ContentType = "text/html", Body = route.Request.Url.Contains("job-listings-") ? naukriApply : naukriCards }));
+        var naukriRoot = Path.Combine(Path.GetTempPath(), "naukri-flow-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var store = new WorkspaceStore(naukriRoot);
+            store.Update(d => { d.Profile = new(Name:"Test Person", Email:"test@example.com", ResumeText:"Python REST", DesiredRole:"Python Developer", Location:"Pune", ExperienceYears:4); return true; });
+            var settings = new ProviderSettings(store, DataProtectionProvider.Create(new DirectoryInfo(Path.Combine(naukriRoot,"keys"))), new ConfigurationBuilder().Build());
+            var runtime = new FixtureBrowser(page);
+            var plan = new SearchPlan("Python Developer","Pune",["Python"],"","","https://www.naukri.com/python-developer-jobs-in-pune");
+            var result = await NaukriDiscovery.Search(runtime, settings, store, plan, default);
+            Check(result.Status == "complete" && result.Added == 1, $"Browser search imports only Naukri cards matching four years experience: {result.Status}: {result.Message}");
+            Check(page.Url.Contains("experience=4"), "Visible Naukri search includes candidate experience");
+            var job = store.Read(d => d.Jobs.Single());
+            Check(job.Company == "Example Company" && job.MinimumExperience == 3 && job.MaximumExperience == 5, "Naukri card company and experience evidence persist");
+            var service = new AssistedApplyService(store, runtime, settings);
+            var attempt = await service.Open(job.Id);
+            Check((await NaukriDiscovery.Search(runtime, settings, store, plan, default)).Status == "needs-user-action", "Searching cannot replace an active application browser");
+            attempt = await service.Continue(attempt.Id);
+            Check(attempt.Status == "ready-to-submit", "Naukri saved-profile application can be reviewed");
+            attempt = await service.Submit(attempt.Id, new(true, attempt.ReviewToken!));
+            Check(attempt.Status == "submitted" && await page.EvaluateAsync<int>("window.naukriSubmits") == 1, "Search-to-apply flow observes a Naukri receipt with one final click");
+        }
+        finally { if (Directory.Exists(naukriRoot)) Directory.Delete(naukriRoot,true); }
         return checks;
     }
 }

@@ -87,7 +87,7 @@ describe('Personalized search and connection setup', () => {
   it('shows results and opens an application on the search page', fakeAsync(() => {
     const fixture = TestBed.createComponent(AppComponent);
     fixture.detectChanges();
-    const job = {id:'regional',title:'Python Developer',company:'Example',location:'Pune',url:'https://www.linkedin.com/jobs/view/123',description:'Python'};
+    const job = {id:'regional',title:'Python Developer',company:'Example',location:'Pune',url:'https://www.naukri.com/job-listings-python-123',source:'Naukri',description:'Python'};
     const workspace = {profile:{name:'Test',email:'',whatsApp:'',resumeText:'Python',desiredRole:'Python Developer',location:'Pune'},matches:[{job,score:100,matchedSkills:['Python'],missingSkills:[]}],applications:[],applicationAttempts:[],notifications:[],integrations:{}};
     http.expectOne('/api/workspace').flush(workspace);
     flushMicrotasks();
@@ -104,6 +104,18 @@ describe('Personalized search and connection setup', () => {
     flushMicrotasks();
     expect(fixture.componentInstance.tab).toBe('search');
     fixture.destroy();
+  }));
+  it('collects published contacts through the dedicated endpoint without an API key', fakeAsync(() => {
+    const component = TestBed.createComponent(AppComponent).componentInstance;
+    component.collectContacts();
+    const req = http.expectOne('/api/hr-contacts/search');
+    expect(req.request.body).toEqual({});
+    req.flush({status:'complete',message:'Added 1 published contact'});
+    flushMicrotasks();
+    http.expectOne('/api/workspace').flush({profile:{experienceYears:4},matches:[],applications:[],notifications:[],integrations:{},hrContacts:[{id:'contact',company:'Example',email:'hiring@company.test',experienceEvidence:'3-5 years'}]});
+    flushMicrotasks();
+    expect(component.data.hrContacts?.[0].company).toBe('Example');
+    expect(component.contactBusy).toBeFalse();
   }));
   it('uses the saved server plan for search links rather than a fixed developer role', () => {
     const component = TestBed.createComponent(AppComponent).componentInstance;

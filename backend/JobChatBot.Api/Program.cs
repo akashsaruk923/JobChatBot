@@ -47,7 +47,14 @@ if (app.Environment.IsDevelopment())
 var api = app.MapGroup("/api").AddEndpointFilter(async (context, next) =>
 {
     var path = context.HttpContext.Request.Path.Value ?? "";
-    if (path == "/api/bot/start" || path.StartsWith("/api/application-attempts") || path.EndsWith("/apply"))
+    if (path.EndsWith("/apply") || path.EndsWith("/submit"))
+    {
+        var store = context.HttpContext.RequestServices.GetRequiredService<WorkspaceStore>();
+        var id = context.HttpContext.Request.RouteValues["id"]?.ToString();
+        var job = store.Read(d => path.EndsWith("/apply") ? d.Jobs.FirstOrDefault(j => j.Id == id) : d.Jobs.FirstOrDefault(j => j.Id == d.ApplicationAttempts.FirstOrDefault(a => a.Id == id)?.JobId));
+        if (job is not null && new Uri(job.Url).Host.Contains("linkedin.com", StringComparison.OrdinalIgnoreCase)) return Results.Conflict(new { error = "LinkedIn is for public contact research only. Apply through Naukri." });
+    }
+    if (path == "/api/bot/start" || path == "/api/search" || path == "/api/chat" || path.StartsWith("/api/application-attempts") || path.EndsWith("/apply"))
     {
         var remote = context.HttpContext.Connection.RemoteIpAddress;
         if (remote?.IsIPv4MappedToIPv6 == true) remote = remote.MapToIPv4();
@@ -64,6 +71,8 @@ var api = app.MapGroup("/api").AddEndpointFilter(async (context, next) =>
     try { return await next(context); }
     catch (ApplyFlowException ex) { return Results.Json(new { error = ex.Message }, statusCode: ex.StatusCode); }
 });
+api.MapPost("/hr-contacts/search", async (WorkspaceStore store, JobDiscovery discovery, IHttpClientFactory clients, CancellationToken ct) => Results.Ok(await HrContactDiscovery.Search(store, discovery, clients, ct)));
+api.MapGet("/hr-contacts", (WorkspaceStore store) => Results.Ok(store.Read(d => d.HrContacts)));
 api.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 api.MapGet("/workspace", (WorkspaceStore store, JobAgent agent, ProviderSettings settings, JobDiscovery discovery) => store.Read(d => new
 {
@@ -74,10 +83,12 @@ api.MapGet("/workspace", (WorkspaceStore store, JobAgent agent, ProviderSettings
     d.ApplicationAttempts,
     d.Bot,
     d.Notifications,
+    d.HrContacts,
     integrations = new { ai = agent.AiConfigured, email = settings.Has("Notifications:SendGridApiKey", "Notifications:FromEmail"), whatsApp = settings.Has("Notifications:WhatsAppToken", "Notifications:WhatsAppPhoneId", "Notifications:WhatsAppTemplate"), search = settings.Has("Search:BraveApiKey"), sendingPaused = settings["Notifications:DisableSending"]?.Equals("true", StringComparison.OrdinalIgnoreCase) == true, notificationsEnabled = settings.NotificationsEnabled, linkedIn = false, naukri = false }
 }));
 api.MapPut("/profile", (ResumeProfile profile, WorkspaceStore store, JobAgent agent) =>
 {
+    if (profile.ExperienceYears is < 0 or > 60) return Results.BadRequest(new { error = "Total experience must be between 0 and 60 years." });
     if (profile.FirstName.Length > 100 || profile.LastName.Length > 100 || profile.PhoneNumber.Length > 30 || profile.Name.Length > 100 || profile.ResumeText.Length > 50000 || profile.DesiredRole.Length > 200 || profile.Location.Length > 200)
         return Results.BadRequest(new { error = "Profile fields exceed allowed size." });
     if (profile.Email.Length > 254 || (profile.Email.Length > 0 && !MailAddress.TryCreate(profile.Email, out _)))
@@ -130,7 +141,7 @@ api.MapPost("/chat", async (ChatInput input, WorkspaceStore store, JobAgent agen
     }
     return Results.Ok(await agent.Chat(input.Message, store.Read(d => d), ct));
 });
-api.MapGet("/automation/capabilities", (IApplyBrowser browser) => Results.Ok(new { enabled = browser.Enabled, browser = "Installed Microsoft Edge on local Windows", login = "Saved browser session or credentials in Connections. CAPTCHA/OTP stops automation.", linkedIn = "Conservative English Easy Apply forms", naukri = "Existing-profile Apply, with recognized receipt required", liveSiteVerified = false }));
+api.MapGet("/automation/capabilities", (IApplyBrowser browser) => Results.Ok(new { enabled = browser.Enabled, browser = "Installed Microsoft Edge on local Windows", login = "Saved browser session or credentials in Connections. CAPTCHA/OTP stops automation.", linkedIn = "Public job contact research only; no LinkedIn submissions", naukri = "Existing-profile Apply, with recognized receipt required", liveSiteVerified = false }));
 api.MapPost("/jobs/{id}/apply", async (string id, AssistedApplyService service) => Results.Ok(await service.Open(id)));
 api.MapGet("/application-attempts", (WorkspaceStore store) => Results.Ok(store.Read(d => d.ApplicationAttempts)));
 api.MapPost("/application-attempts/{id}/continue", async (string id, AssistedApplyService service) => Results.Ok(await service.Continue(id)));
@@ -147,6 +158,8 @@ api.MapPost("/bot/start", (BotPolicy input, WorkspaceStore store, IApplyBrowser 
     if (data.Bot.Enabled) return Results.Conflict(new { error = "Bot is already running. Stop it before changing policy." });
     if (string.IsNullOrWhiteSpace(data.Profile.Name) || !MailAddress.TryCreate(data.Profile.Email, out _) || string.IsNullOrWhiteSpace(data.Profile.ResumeText) || string.IsNullOrWhiteSpace(discovery.Plan(data.Profile).Role))
         return Results.BadRequest(new { error = "Save your name, valid email, resume and target role before starting." });
+    if (!data.Profile.ExperienceYears.HasValue) return Results.BadRequest(new { error = "Save total years of experience before starting Naukri auto-apply." });
+    if (!input.AllowNaukriProfileApply) return Results.BadRequest(new { error = "Authorize Naukri saved-profile applications before starting." });
     if (!browser.Enabled) return Results.Conflict(new { error = "Run this backend locally on Windows with installed Edge. The cloud backend cannot use your Windows login/browser." });
     var state = store.Update(d => { d.Bot = new(true, "queued", "Authorized run queued. Search and bounded submissions start shortly. CAPTCHA/OTP or unknown questions pause the bot.", input, AssistedApplyService.ProfileHash(d.Profile), DateTimeOffset.UtcNow, AuthorizationId: Guid.NewGuid().ToString("N")); return d.Bot; });
     return Results.Ok(state);

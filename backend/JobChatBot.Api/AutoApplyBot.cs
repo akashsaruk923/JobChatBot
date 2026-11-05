@@ -44,12 +44,14 @@ public static class AutoApplyRun
                 await steps.Close(attempt.Id);
                 return true;
             }
+            var experience = store.Read(d => d.Profile.ExperienceYears);
+            if (!experience.HasValue) { Pause("Save total years of experience before starting Naukri auto-apply."); return; }
             var pending = store.Read(d => d.ApplicationAttempts.FirstOrDefault(a => a.Status is "opening" or "needs-user-action" or "ready-to-submit" or "submitting" or "submission-unknown"));
             if (pending is not null)
             {
                 if (pending.Status is "submitting" or "submission-unknown") { Pause("An earlier submission is uncertain. Check the site and Verify or record your own confirmation. It will not be retried automatically."); return; }
                 var pendingMatch = steps.Rank().FirstOrDefault(m => m.Job.Id == pending.JobId);
-                if (pendingMatch is null || pendingMatch.Score < initial.Policy.MinimumMatchScore || pendingMatch.Job.Url.Contains("naukri.com") && !initial.Policy.AllowNaukriProfileApply)
+                if (pendingMatch is null || pendingMatch.Job.Source != "Naukri" || !Experience.Fits(experience.Value, pendingMatch.Job.MinimumExperience, pendingMatch.Job.MaximumExperience) || pendingMatch.Score < initial.Policy.MinimumMatchScore || pendingMatch.Job.Url.Contains("naukri.com") && !initial.Policy.AllowNaukriProfileApply)
                 { Pause("The unfinished application does not meet the current policy. Close that attempt before starting another."); return; }
                 if (!await Finish(pending)) return;
             }
@@ -62,6 +64,8 @@ public static class AutoApplyRun
             var specific = roleWords.Where(w => w is not "developer" and not "engineer" and not "consultant" and not "specialist").ToArray();
             if (specific.Length > 0) roleWords = specific;
             var candidates = steps.Rank().Where(m => m.Score >= initial.Policy.MinimumMatchScore && AssistedApplyService.SupportedUrl(m.Job.Url)
+                && m.Job.Source == "Naukri" && new Uri(m.Job.Url).Host is "www.naukri.com" or "naukri.com"
+                && Experience.Fits(experience.Value, m.Job.MinimumExperience, m.Job.MaximumExperience)
                 && roleWords.Any(w => m.Job.Title.Contains(w, StringComparison.OrdinalIgnoreCase)))
                 .Where(m => string.IsNullOrWhiteSpace(plan.Location) || (m.Job.Location + " " + m.Job.Title + " " + m.Job.Description).Contains(plan.Location, StringComparison.OrdinalIgnoreCase))
                 .Where(m => !m.Job.Url.Contains("naukri.com", StringComparison.OrdinalIgnoreCase) || initial.Policy.AllowNaukriProfileApply)
@@ -108,7 +112,7 @@ public sealed class AutoApplyBot(WorkspaceCatalog catalog, IDataProtectionProvid
                     }
                     var settings = new ProviderSettings(store, protection, config);
                     var agent = new JobAgent(clients, settings);
-                    var discovery = new JobDiscovery(agent, settings, clients);
+                    var discovery = new JobDiscovery(agent, settings, clients, browser);
                     var service = new AssistedApplyService(store, browser, settings);
                     await AutoApplyRun.Run(store, new LiveAutoApplySteps(store, discovery, agent, service), ct);
                 }

@@ -8,13 +8,13 @@ internal static class BotChecks
         var count = 0;
         void Check(bool condition, string message) { if (!condition) throw new Exception(message); count++; }
         var store = new WorkspaceStore(Path.Combine(root, "bot-test"));
-        var profile = new ResumeProfile(Name: "Test Person", Email: "test@example.com", ResumeText: ".NET SQL", DesiredRole: ".NET Developer");
-        var policy = new BotPolicy(true, 70, 2, 60);
+        var profile = new ResumeProfile(Name: "Test Person", Email: "test@example.com", ResumeText: ".NET SQL", DesiredRole: ".NET Developer", ExperienceYears: 4);
+        var policy = new BotPolicy(true, 70, 2, 60, true);
         void Reset() => store.Update(d =>
         {
             d.Profile = profile; d.Applications.Clear(); d.ApplicationAttempts.Clear();
             d.Bot = new(true, "queued", "", policy, AssistedApplyService.ProfileHash(profile), DateTimeOffset.UtcNow);
-            d.Jobs = Enumerable.Range(1, 4).Select(i => new Job(i.ToString(), ".NET Developer", "Test", "", "https://www.linkedin.com/jobs/view/" + i, ".NET SQL", DateTimeOffset.UtcNow)).ToList(); return true;
+            d.Jobs = Enumerable.Range(1, 4).Select(i => new Job(i.ToString(), ".NET Developer", "Test", "", "https://www.naukri.com/job-listings-test-" + i, ".NET SQL", DateTimeOffset.UtcNow, "Naukri", "visible-listing-card", 3, 5)).ToList(); return true;
         });
         Reset();
         var steps = new FakeSteps(store);
@@ -35,7 +35,7 @@ internal static class BotChecks
         Reset(); store.Update(d => { d.Profile = d.Profile with { ResumeText = "Changed resume" }; return true; }); steps = new(store);
         await AutoApplyRun.Run(store, steps, default);
         Check(steps.Submits == 0 && !store.Read(d => d.Bot.Enabled), "Profile changes invalidate unattended authorization");
-        Reset(); store.Update(d => { d.Jobs[0] = d.Jobs[0] with { Url = "https://www.naukri.com/job-listings-test" }; return true; }); steps = new(store);
+        Reset(); store.Update(d => { d.Bot = d.Bot with { Policy = policy with { AllowNaukriProfileApply = false } }; return true; }); steps = new(store);
         await AutoApplyRun.Run(store, steps, default);
         Check(!steps.Opened.Contains("1"), "Naukri saved-profile apply requires separate opt-in");
         Reset(); steps = new FakeSteps(store) { ReplaceAuthorization = true };

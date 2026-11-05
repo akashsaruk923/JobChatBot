@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 
-interface Profile { name: string; email: string; whatsApp: string; resumeText: string; desiredRole: string; location: string; firstName?: string; lastName?: string; phoneNumber?: string; }
+interface Profile { name: string; email: string; whatsApp: string; resumeText: string; desiredRole: string; location: string; firstName?: string; lastName?: string; phoneNumber?: string; experienceYears?: number | null; }
 interface Job { id: string; title: string; company: string; location: string; url: string; description: string; source?: string; descriptionKind?: string; }
 interface Match { job: Job; score: number; matchedSkills: string[]; missingSkills: string[]; }
 interface Application { id: string; jobId: string; status: string; confirmedAt: string; }
@@ -13,9 +13,11 @@ interface SearchPlan { role: string; location: string; skills: string[]; query: 
 interface SearchResult { status: string; plan: SearchPlan; added: number; message: string; }
 interface Attempt { id: string; jobId: string; status: string; detail: string; reviewToken?: string; fields?: {label:string;value:string}[]; }
 interface BotState { enabled: boolean; status: string; detail: string; submittedThisRun: number; nextRunAt?: string; }
-interface Workspace { bot?: BotState; applicationAttempts?: Attempt[]; plan?: SearchPlan; profile: Profile; matches: Match[]; applications: Application[]; notifications: Notice[]; integrations: { ai: boolean; email: boolean; whatsApp: boolean; linkedIn: boolean; naukri: boolean; search?: boolean; notificationsEnabled?: boolean; sendingPaused?: boolean; }; }
+interface HrContact { id:string; company:string; email:string; jobTitle:string; sourceUrl:string; experienceEvidence:string; collectedAt:string; }
+interface Workspace { hrContacts?: HrContact[]; bot?: BotState; applicationAttempts?: Attempt[]; plan?: SearchPlan; profile: Profile; matches: Match[]; applications: Application[]; notifications: Notice[]; integrations: { ai: boolean; email: boolean; whatsApp: boolean; linkedIn: boolean; naukri: boolean; search?: boolean; notificationsEnabled?: boolean; sendingPaused?: boolean; }; }
 @Component({ selector: 'app-root', standalone: true, imports: [CommonModule, FormsModule], templateUrl: './app.component.html', styleUrls: ['./app.component.css'] })
 export class AppComponent implements OnInit {
+  contactBusy = false; contactMessage = '';
   tab = 'overview'; busy = false; error = ''; success = ''; loading = true;
   profile: Profile = { name: '', email: '', whatsApp: '', resumeText: '', desiredRole: '', location: '' };
   data: Workspace = { profile: this.profile, matches: [], applications: [], notifications: [], integrations: { ai: false, email: false, whatsApp: false, linkedIn: false, naukri: false } };
@@ -25,23 +27,11 @@ export class AppComponent implements OnInit {
   searchBusy = false; searchResult: SearchResult | null = null; uploading = false;
   credentialValues: Record<string, string> = {}; configured: Record<string, boolean> = {}; enableNotifications = false;
   credentialFields = [
-    { key: 'LinkedIn:Email', label: 'LinkedIn login email', placeholder: 'Your LinkedIn sign-in email', secret: false, group: 'Job-site login', note: 'Used only in the local installed Edge browser. OTP/CAPTCHA pauses the bot.' },
-    { key: 'LinkedIn:Password', label: 'LinkedIn password', placeholder: 'Your LinkedIn password (optional with saved session)', secret: true, group: 'Job-site login', note: 'Protected on the local backend. Never paste passwords into chat.' },
     { key: 'Naukri:Email', label: 'Naukri login email', placeholder: 'Your Naukri sign-in email', secret: false, group: 'Job-site login', note: 'Naukri native apply uses the resume/profile saved in your Naukri account.' },
     { key: 'Naukri:Password', label: 'Naukri password', placeholder: 'Your Naukri password (optional with saved session)', secret: true, group: 'Job-site login', note: 'Existing Edge sessions can be used instead. Unknown forms require your action.' },
-    { key: 'Search:BraveApiKey', label: 'Brave Search API key (optional)', placeholder: 'Enter your Brave Search API key', secret: true, group: 'Job search', note: 'Optional indexed LinkedIn / Naukri search. Leave blank for keyless public LinkedIn search.' },
-    { key: 'Ai:ApiKey', label: 'AI provider API key', placeholder: 'Enter your AI provider API key', secret: true, group: 'AI assistant', note: 'Used by the .NET AI agent. Resume text is shared with this provider for chat.' },
-    { key: 'Ai:Model', label: 'AI model', placeholder: 'Your provider model ID', secret: false, group: 'AI assistant', note: '' },
-    { key: 'Ai:BaseUrl', label: 'AI API base URL', placeholder: 'https://api.openai.com/v1', secret: false, group: 'AI assistant', note: 'Optional. HTTPS OpenAI-compatible API base.' },
-    { key: 'Notifications:SendGridApiKey', label: 'SendGrid API key', placeholder: 'SG.…', secret: true, group: 'Email', note: 'Destination: api.sendgrid.com.' },
-    { key: 'Notifications:FromEmail', label: 'Verified sender email', placeholder: 'jobs@yourdomain.com', secret: false, group: 'Email', note: 'Recipient is taken from this workspace’s resume profile.' },
-    { key: 'Notifications:WhatsAppToken', label: 'WhatsApp Business access token', placeholder: 'Enter your Meta access token', secret: true, group: 'WhatsApp', note: 'Destination: graph.facebook.com.' },
-    { key: 'Notifications:WhatsAppPhoneId', label: 'WhatsApp Business phone ID', placeholder: 'Your business phone-number ID', secret: false, group: 'WhatsApp', note: '' },
-    { key: 'Notifications:WhatsAppTemplate', label: 'Approved WhatsApp template', placeholder: 'job_application_recorded', secret: false, group: 'WhatsApp', note: 'Three body parameters: job title, company, listing URL. Recipient must opt in.' },
-    { key: 'Notifications:WhatsAppLanguage', label: 'Template language', placeholder: 'en_US', secret: false, group: 'WhatsApp', note: '' }
   ];
   message = ''; chatBusy = false;
-  messages = [{ role: 'assistant', text: 'Hi! Save your resume, add a job listing, and I’ll help compare your skills. Save your resume to build a personalized search. Public LinkedIn search works without an API key. Start Bot can authorize bounded local browser applications; challenges pause it.', mode: 'local-guide' }];
+  messages = [{ role: 'assistant', text: 'Hi! Save your resume, add a job listing, and I’ll help compare your skills. Save your resume to build a personalized search. Search Naukri in the visible Edge browser without API keys. LinkedIn is used only to collect published job contacts matching your experience. Start Bot authorizes bounded Naukri applications; challenges pause it.', mode: 'local-guide' }];
   constructor(private http: HttpClient, private zone: NgZone) {}
   async ngOnInit() { await this.refresh(true); this.zone.runOutsideAngular(() => { this.botTimer = setInterval(() => { if (this.tab === 'bot' || this.data.bot?.enabled) this.zone.run(() => this.refresh()); }, 5000); }); }
   ngOnDestroy() { if (this.botTimer) clearInterval(this.botTimer); }
@@ -51,7 +41,7 @@ export class AppComponent implements OnInit {
   }
   showError(e: unknown) { this.error = e instanceof HttpErrorResponse ? e.error?.error || 'Cannot reach the API. Check that the .NET service is running.' : 'Something went wrong. Please try again.'; }
   async saveProfile(invalid = false) {
-    if (invalid) { this.success = ''; this.error = 'Check the highlighted profile fields. WhatsApp is optional; leave it blank or use a country code such as +919876543210.'; return; }
+    if (invalid) { this.success = ''; this.error = 'Check total experience (0–60 years) and the highlighted profile fields. WhatsApp is optional; leave it blank or use a country code such as +919876543210.'; return; }
     this.busy = true; this.error = ''; this.success = '';
     try { await firstValueFrom(this.http.put('/api/profile', this.profile)); await this.refresh(); this.success = 'Resume saved. Your personalized search is ready.'; this.tab = 'search'; await this.searchJobs(); }
     catch (e) { this.showError(e); } finally { this.busy = false; }
@@ -104,6 +94,11 @@ export class AppComponent implements OnInit {
   notices(id: string) { return this.data.notifications.filter(n => n.applicationId === id); }
   searchUrl(source: string) {
     return source === 'linkedin' ? this.data.plan?.linkedInUrl || 'https://www.linkedin.com/jobs/' : this.data.plan?.naukriUrl || 'https://www.naukri.com/';
+  }
+  async collectContacts() {
+    this.contactBusy = true; this.error = ''; this.contactMessage = '';
+    try { const result = await firstValueFrom(this.http.post<{status:string;message:string}>('/api/hr-contacts/search', {})); this.contactMessage = result.message; await this.refresh(); }
+    catch(e) { this.showError(e); } finally { this.contactBusy = false; }
   }
   async searchJobs() {
     this.searchBusy = true; this.error = '';

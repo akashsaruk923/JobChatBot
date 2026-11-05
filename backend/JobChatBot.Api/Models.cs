@@ -1,8 +1,8 @@
 namespace JobChatBot.Api;
 
-public record ResumeProfile(string Name = "", string Email = "", string WhatsApp = "", string ResumeText = "", string DesiredRole = "", string Location = "", string FirstName = "", string LastName = "", string PhoneNumber = "");
+public record ResumeProfile(string Name = "", string Email = "", string WhatsApp = "", string ResumeText = "", string DesiredRole = "", string Location = "", string FirstName = "", string LastName = "", string PhoneNumber = "", double? ExperienceYears = null);
 public record JobInput(string Title, string Company, string Location, string Url, string Description);
-public record Job(string Id, string Title, string Company, string Location, string Url, string Description, DateTimeOffset AddedAt, string Source = "manual", string DescriptionKind = "full");
+public record Job(string Id, string Title, string Company, string Location, string Url, string Description, DateTimeOffset AddedAt, string Source = "manual", string DescriptionKind = "full", double? MinimumExperience = null, double? MaximumExperience = null);
 public record Match(Job Job, int Score, string[] MatchedSkills, string[] MissingSkills);
 public record Application(string Id, string JobId, string Status, DateTimeOffset ConfirmedAt);
 public record Notification(string Id, string ApplicationId, string Channel, string Status, string Detail, DateTimeOffset CreatedAt);
@@ -15,6 +15,7 @@ public class WorkspaceData
     public List<ApplicationAttempt> ApplicationAttempts { get; set; } = [];
     public ResumeProfile Profile { get; set; } = new();
     public List<Job> Jobs { get; set; } = [];
+    public List<HrContact> HrContacts { get; set; } = [];
     public List<Application> Applications { get; set; } = [];
     public List<Notification> Notifications { get; set; } = [];
 }
@@ -28,3 +29,5 @@ public record BotPolicy(bool AuthorizeSubmission, int MinimumMatchScore = 70, in
 public record BotState(bool Enabled = false, string Status = "stopped", string Detail = "Bot has not been started.", BotPolicy? Policy = null, string? ProfileHash = null, DateTimeOffset? NextRunAt = null, DateTimeOffset? LastRunAt = null, int SubmittedThisRun = 0, string? AuthorizationId = null);
 
 public record ResolveUnknownInput(bool CheckedOriginalSite);
+
+public record HrContact(string Id, string Company, string Email, string JobTitle, string SourceUrl, string ExperienceEvidence, double MinimumExperience, double MaximumExperience, DateTimeOffset CollectedAt);

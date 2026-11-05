@@ -6,7 +6,7 @@ namespace JobChatBot.Api;
 
 public record SearchPlan(string Role, string Location, string[] Skills, string Query, string LinkedInUrl, string NaukriUrl);
 public record DiscoveryResult(string Status, SearchPlan Plan, int Added, string Message);
-public sealed class JobDiscovery(JobAgent agent, ProviderSettings config, IHttpClientFactory clients)
+public sealed class JobDiscovery(JobAgent agent, ProviderSettings config, IHttpClientFactory clients, IApplyBrowser? browser = null)
 {
     public SearchPlan Plan(ResumeProfile profile)
     {
@@ -36,6 +36,7 @@ public sealed class JobDiscovery(JobAgent agent, ProviderSettings config, IHttpC
         var plan = Plan(profile);
         if (string.IsNullOrWhiteSpace(profile.ResumeText) || string.IsNullOrWhiteSpace(plan.Role))
             return new("needs-profile", plan, 0, "Save your resume and preferred role first. Search uses the saved profile for this browser workspace.");
+        if (browser is not null) return await NaukriDiscovery.Search(browser, config, store, plan, ct);
         if (!config.Has("Search:BraveApiKey"))
             return await KeylessJobSearch.Search(clients, store, plan, ct);
         try

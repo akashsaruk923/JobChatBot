@@ -63,8 +63,12 @@ with tempfile.TemporaryDirectory(prefix='jobchat-test-') as tmp:
         with opener.open(base + '/swagger/index.html') as response:
             check(response.status == 200 and b'swagger-ui-bundle.js' in response.read(), 'Swagger UI loads in Development')
         initial = request('/api/workspace')
+        check(initial['hrContacts'] == [], 'Contacts start empty in a private workspace')
+        check(request('/api/hr-contacts') == [], 'Contact endpoint returns current workspace only')
+        contact_result = request('/api/hr-contacts/search', 'POST', {})
+        check(contact_result['status'] == 'needs-profile', 'Contact research requires experience and profile before network access')
         check(initial['matches'] == [], 'Workspace should start empty')
-        profile = dict(name='Test User', email='', whatsApp='', resumeText='Experienced Angular, C# and .NET developer with SQL.', desiredRole='Developer', location='Pune')
+        profile = dict(name='Test User', email='', whatsApp='', resumeText='Experienced Angular, C# and .NET developer with SQL.', desiredRole='Developer', location='Pune', experienceYears=4)
         saved = request('/api/profile', 'PUT', profile)
         check('Angular' in saved['skills'] and '.NET' in saved['skills'], 'Resume skills extracted')
         request('/api/profile', 'PUT', {**profile, 'resumeText': None}, 400)
@@ -77,7 +81,7 @@ with tempfile.TemporaryDirectory(prefix='jobchat-test-') as tmp:
         workspace = request('/api/workspace')
         match = workspace['matches'][0]
         check(match['score'] == 75 and match['missingSkills'] == ['Azure'], 'Expected 3 of 4 skills matched')
-        request('/api/jobs/' + created['id'] + '/apply', 'POST', {}, 400)
+        request('/api/jobs/' + created['id'] + '/apply', 'POST', {}, 409)
         request('/api/jobs/missing/apply', 'POST', {}, 404)
         request('/api/application-attempts/missing/continue', 'POST', {}, 404)
         request('/api/application-attempts/missing/submit', 'POST', {'approved':False,'reviewToken':''}, 400)
@@ -105,7 +109,7 @@ with tempfile.TemporaryDirectory(prefix='jobchat-test-') as tmp:
         request('/api/profile', 'PUT', profile)
         if os.name != 'nt':
             request('/api/profile', 'PUT', {**profile, 'email': 'test@example.com'})
-            unavailable = request('/api/bot/start', 'POST', {'authorizeSubmission': True, 'minimumMatchScore': 70, 'maxApplicationsPerRun': 1, 'intervalMinutes': 60}, 409)
+            unavailable = request('/api/bot/start', 'POST', {'authorizeSubmission': True, 'minimumMatchScore': 70, 'maxApplicationsPerRun': 1, 'intervalMinutes': 60, 'allowNaukriProfileApply': True}, 409)
             check('Windows' in unavailable['error'] and 'API key' not in unavailable['error'], 'Keyless bot start reaches platform capability check without requiring Brave')
             request('/api/profile', 'PUT', profile)
         other = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))

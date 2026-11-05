@@ -102,6 +102,20 @@ try
     Check((await keylessSearch.Search(keylessStore, default)).Status == "provider-error", "Unrecognized pages do not claim successful discovery");
     factory.Reply = _ => new(HttpStatusCode.OK) { Content = new StringContent("") };
     Check((await keylessSearch.Search(keylessStore, default)).Status == "complete", "Empty guest results are handled");
+    var contactJob = new Job("contact", "Python Developer", "Example", "Pune", "https://www.linkedin.com/jobs/view/123", "", DateTimeOffset.UtcNow);
+    const string publicDescription = "<div class='show-more-less-html__markup'><p>Python developer, 3-5 years experience. Contact hiring@company.test</p></div>";
+    var hr = HrContactDiscovery.Extract(contactJob, publicDescription, 4);
+    Check(hr.Length == 1 && hr[0].Company == "Example" && hr[0].Email == "hiring@company.test" && hr[0].SourceUrl == contactJob.Url, "Save only published contacts with company and source evidence");
+    Check(HrContactDiscovery.Extract(contactJob, publicDescription, 8).Length == 0, "Exclude openings outside candidate experience");
+    Check(HrContactDiscovery.Extract(contactJob, publicDescription.Replace("3-5 years", "experienced"), 4).Length == 0, "Unknown experience must not imply a match");
+    Check(HrContactDiscovery.Extract(contactJob, publicDescription.Replace("hiring@company.test", "contact HR"), 4).Length == 0, "Never invent an HR email");
+    Check(HrContactDiscovery.Extract(contactJob, publicDescription.Replace("3-5 years", "3-5 years or 8-10 years"), 4).Length == 0, "Ambiguous multiple experience ranges require manual review");
+    keylessStore.Update(d => { d.Profile = d.Profile with { ExperienceYears = 4 }; return true; });
+    factory.Reply = request => new(HttpStatusCode.OK) { Content = new StringContent(request.RequestUri!.AbsolutePath.Contains("jobPosting/") ? publicDescription : cards) };
+    await HrContactDiscovery.Search(keylessStore, keylessSearch, factory, default);
+    Check(keylessStore.Read(d => d.HrContacts.Count) == 1, "Public contact discovery persists experience-matched published emails without API keys");
+    await HrContactDiscovery.Search(keylessStore, keylessSearch, factory, default);
+    Check(new WorkspaceStore(keylessStore.DirectoryPath).Read(d => d.HrContacts.Count) == 1, "Contacts survive store reload and repeated scans deduplicate");
     var recipients = new List<string>();
     factory.Reply = request =>
     {

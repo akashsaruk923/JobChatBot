@@ -1,153 +1,82 @@
 # JobChat
 
-Angular **16** + **.NET 10** job search and local browser application bot. Resume extraction, search, matching, browser login/form handling, recurring runs and notifications are implemented in C#.
+Angular 16 + .NET 10 application for **Naukri search/apply in a visible local Edge browser** and **experience-matched public contact research from LinkedIn openings**. This workflow needs no API keys. LinkedIn apply/submit requests are disabled.
 
-## Run on Windows
+## Start on Windows
 
-Stop the old backend first (Ctrl+C, or Shift+F5 in Visual Studio), then from the repository root:
+Prerequisites: installed Microsoft Edge, .NET SDK **10.0.403** (see `global.json`), Node **18.20.8** and npm **10.8.2**. No Playwright browser download is required for installed Edge.
+
+Close old JobChat API/frontend terminals first. From the repository root:
 
 ```cmd
 git pull origin main
-cd backend\JobChatBot.Api
-dotnet restore
-dotnet run --launch-profile bot
+scripts\start-windows.cmd
 ```
 
-Swagger: **http://127.0.0.1:5080/swagger**.
+The helper builds the backend, installs frontend dependencies if absent and opens API/frontend terminals. Wait for both services, then open `http://127.0.0.1:4200`. Swagger is available at `http://127.0.0.1:5080/swagger`. Use the same hostname consistently to keep the same cookie workspace.
 
-In another terminal:
+The Windows helper itself has not been executed in the Linux development environment. Its underlying build/start commands are repository-supported. Manual equivalent:
 
 ```cmd
-cd C:\Users\akash\source\repos\JobChatBot\frontend
+cd backend\JobChatBot.Api
+dotnet run --launch-profile http
+```
+
+In a second terminal:
+
+```cmd
+cd frontend
 npm ci
 npm start
 ```
 
-Frontend: **http://127.0.0.1:4200**. Use the same hostname for frontend and Swagger if they should share a browser workspace.
+The `http` launch profile pauses notification sending. Server startup and profile saving do not authorize any application submissions.
 
-The frontend was developed/tested with Node 18.20.8 and npm 10.8.2, as required by Angular 16. If you intentionally use your installed Node 24 instead, `npm ci --engine-strict=false` bypasses the version check; Node 24 compatibility with Angular 16 is not guaranteed.
+## Naukri search and applications
 
-Use **installed Microsoft Edge** on Windows. No Playwright browser download command is needed. `dotnet restore` installs the .NET client/driver library. A cloud/Linux backend cannot operate the Edge browser on your Windows machine.
+1. Save resume, name, valid application email, target role, location and **Total experience (years)**, for example `4`. Application phone should include the country code. WhatsApp is optional.
+2. **Find jobs → Search Naukri in browser** opens the real Naukri website visibly in a separate persistent Edge profile. Sign in on the website if needed. Complete OTP/CAPTCHA yourself, then retry Search. Existing sessions persist across restarts. Optional Naukri login settings are protected on the local server; storing a password in JobChat is not required.
+3. Search reads up to 25 visible cards. Only explicit experience ranges containing the saved experience are imported. For four years, a `3-5 Yrs` listing matches; `8-10 Yrs` and missing ranges do not. The current adapter supports `.srp-jobtuple-wrapper` and `article.jobTuple` cards. A changed/unsupported page stops with a message rather than fabricated jobs.
+4. Review the resume and answers saved **IN YOUR NAUKRI ACCOUNT**. Native Naukri Apply uses those, not JobChat's uploaded file. Use **Apply on Naukri** for reviewed apply, then Continue and Approve & submit once. The Naukri page stays visible in Edge.
+5. For recurring auto-apply, open **Naukri auto-apply**, choose limits and enable the Naukri-profile opt-in and real-submission authorization. Start Bot searches and applies only to eligible Naukri jobs. The backend must remain running; the frontend can close. Stop prevents subsequent jobs; a click already in flight can finish.
 
-## Start once → search → match → apply
+Unknown questions, CAPTCHA/OTP, employer redirects, changed forms and uncertain outcomes pause automation. Salary, eligibility and other missing answers are not invented. Success is recorded only after a supported site confirmation is observed. An uncertain submission is never automatically retried. An active attempt's browser cannot be replaced by a new search. Interrupted runs pause after a backend restart. Profile/login changes require fresh review/authorization.
 
-1. **Resume & profile:** upload PDF/DOCX/TXT or paste text. Fill your name, email, target role/location, explicit first/last name and application phone number. The application phone is separate from WhatsApp. Review extracted text, then save. An uploaded original file is retained privately for attachment; editing extracted text stops automatic attachment of a mismatched file.
-2. **Connections:** No API key is required for public LinkedIn search, local skill matching or the local chat guide. An optional **Brave Search API key** adds indexed LinkedIn/Naukri search. Optional LinkedIn/Naukri login email/password can be saved here, protected by .NET Data Protection. You can also log in directly in the separate Edge window and keep that session. Never paste passwords into chat.
-3. For email/WhatsApp, add SendGrid/Meta settings and profile recipients. Check the pending queue and enable notification sending explicitly. The `bot` backend launch profile permits sending; `http` and `scripts/dev.sh` keep notification sending paused. Starting `bot` can send an already-authorized pending notification queue—review it first.
-4. **Auto-apply bot:** choose minimum match score, maximum applications per run (1–10), and repeat interval (30–1440 minutes). Naukri native-profile apply has a separate opt-in because it uses the resume and answers saved **in your Naukri account**, not JobChat's uploaded file.
-5. Check the explicit authorization for real submissions, then **Start Bot**. Each run searches indexed LinkedIn/Naukri listings, filters supported URLs/role/skill score/location text, skips previously attempted/applied listings, and processes eligible applications up to the limit. The backend must remain running; the frontend may be closed.
-6. **Stop bot** prevents subsequent jobs. A Submit already in flight may still complete. Changing the resume or connection settings stops the bot and requires fresh authorization.
+A skill-overlap score is not a hiring probability. Location text and role keywords also filter automatic candidates. Browser behavior is best effort; site changes can break selectors.
 
-### What can run without per-job approval
+## LinkedIn public contacts
 
-For supported **English LinkedIn Easy Apply** dialogs, the agent fills only recognized fields from the saved profile and attaches a matching uploaded resume when supported. It advances recognized Next/Review buttons and submits once under the Start Bot authorization. It does not infer salary, years of experience, work authorization, demographic information, application consent or unknown answers.
+Open **HR contacts → Find published contacts**. The backend searches public LinkedIn guest listings and checks up to ten public job descriptions without an API key. It saves this structure privately:
 
-For a recognized **Naukri native Apply** button, explicit Naukri opt-in permits applying with the account's existing profile/resume. Employer redirects, custom questionnaires and other layouts are not automated.
+| Company | Published email | Job title | Experience evidence | Source opening | Collected time |
+| --- | --- | --- | --- | --- | --- |
+| From listing | Explicitly published in description | From listing | e.g. 3–5 years | Original listing URL | Timestamp |
 
-**This is best-effort browser automation, not a guaranteed unattended integration for every job.** Real LinkedIn/Naukri account flows have not been tested in this environment. Sites can change layouts, require verification or restrict automation. Credentials alone do not guarantee access. No official LinkedIn/Naukri submission API is configured. Do not use this as a public production service.
+A single explicit experience range must contain the candidate's saved years. Missing/ambiguous experience, missing company or absent email produce no contact record. No guessed emails, private recruiter profiles, email delivery or LinkedIn submissions are involved. Published addresses are **not verified HR identities**, deliverability checks or proof an opening remains active. Contacts persist across backend restarts and deduplicate by source/email. This adapter reads LinkedIn job descriptions, not arbitrary employer websites.
 
-### Pauses and confirmation
+LinkedIn may restrict public access. Regional links such as `in.linkedin.com` normalize to the canonical supported origin. Cloud research requires allowed network access to `www.linkedin.com`; Naukri browsing occurs on the user's Windows backend.
 
-- CAPTCHA, OTP, login problems, unknown required questions, unsupported layouts and uncertain confirmation **pause** the bot. Complete verification yourself in Edge; it is never bypassed.
-- After resolving a known-field/login screen, Start Bot can resume the unfinished application under fresh authorization. If you changed your saved profile, close the old attempt and open it again.
-- An attempt can also be opened manually from an opportunity card. **Continue**, **Approve & submit once**, **Verify confirmation** and **Close browser** are available under Application attempts when the bot is stopped.
-- The final Submit transition is persisted before clicking. Concurrent/repeated requests cannot click Submit twice. Unknown results are never retried automatically.
-- An application and two notification entries are created only after a supported confirmation is observed in the same job-site browser. This is browser evidence, **not a platform API receipt** or hiring outcome.
-- For an uncertain outcome, check the original site and use Verify. If you personally verified submission, the existing **I submitted an application** action records a separately labeled user confirmation. Do not resubmit uncertain applications.
-- If you checked the original site and verified that it was **not** submitted, use **I checked: not submitted** to clear the uncertain attempt. That job remains excluded from automatic retries; starting it again requires a deliberate manual Open action.
-- Interrupted active runs are paused after a backend restart. Persistent site sessions can survive, but live pages/connections must not be assumed to survive.
+## Storage and API
 
-Indexed search snippets may be stale or incomplete. Scores represent recognized keyword overlap, not hiring probability. A specified location must appear in the saved listing title/description/location before unattended application; listings with unknown location may be skipped. Job location/company are not invented when absent from provider results.
+Browser cookie workspaces are isolated; they are not authenticated accounts. Clearing cookies loses access to that browser workspace. This is a local application, not a public multi-user service. Private data lives in ignored `backend/JobChatBot.Api/App_Data/sessions/<id>/`: profile/jobs/contacts JSON, retained resume, encrypted connection settings and Edge session files. Preserve `App_Data/keys` with encrypted settings in backups. Resume/JSON/browser files are not encrypted by this application. Do not commit private data or run duplicate API instances against the same store.
 
-## Backend API / Swagger
+`DataDirectory` overrides the private data root. `BrowserApply__Enabled=false` disables local browser automation. Existing optional AI/notification provider settings remain compatible, but are unnecessary for the current workflow and their API-key inputs are omitted from Connections. Notification sending remains paused in the standard development profile. No real messages should be sent during setup.
 
-Swagger is enabled only in Development. `dotnet run --no-launch-profile` may default to Production and hide `/swagger`. Use `--launch-profile http` for development with notification sending paused, or `--launch-profile bot` for explicitly enabled delivery plus local browser operation.
+Useful endpoints: `GET /api/health`, `GET /api/workspace`, `PUT /api/profile`, `POST /api/resume/extract`, `POST /api/search`, `POST /api/hr-contacts/search`, `GET /api/hr-contacts`, `POST /api/bot/start`, `POST /api/bot/stop`, `POST /api/jobs/{id}/apply`, and application-attempt Continue/Submit/Verify/Close endpoints. Browser operations require loopback access. Swagger is Development-only.
 
-| API | Purpose |
-| --- | --- |
-| `GET /api/health`, `GET /api/workspace` | Readiness and private workspace state |
-| `PUT /api/profile`, `POST /api/resume/extract` | Profile and resume upload/extraction |
-| `GET/PUT/DELETE /api/connections` | Presence metadata / protected settings / removal |
-| `POST /api/search`, `POST /api/chat` | Resume search and optional AI guidance |
-| `GET /api/bot` | Current bot state and local browser capability |
-| `POST /api/bot/start` | Authorize recurring bounded applications |
-| `POST /api/bot/stop` | Stop subsequent applications |
-| `GET /api/automation/capabilities` | Supported browser mode and live-verification status |
-| `POST /api/jobs/{id}/apply` | Open a supported listing in the local Edge profile |
-| `GET /api/application-attempts` | Attempt states and review details |
-| `POST /api/application-attempts/{id}/continue` | Fill supported fields / resume current form |
-| `POST /api/application-attempts/{id}/submit` | One-time reviewed submission with approval + token |
-| `POST /api/application-attempts/{id}/verify` | Check visible confirmation without another submission |
-| `POST /api/application-attempts/{id}/not-submitted` | Explicitly resolve an uncertain result after checking the site |
-| `DELETE /api/application-attempts/{id}/browser` | Close that local application browser |
-| `POST /api/jobs/{id}/confirm` | Record the person's own submission confirmation |
-
-Start request example (uses the current browser cookie workspace):
-
-```json
-{
-  "authorizeSubmission": true,
-  "minimumMatchScore": 70,
-  "maxApplicationsPerRun": 3,
-  "intervalMinutes": 60,
-  "allowNaukriProfileApply": false
-}
-```
-
-Browser-launch/submission APIs accept only loopback requests. No bot is started simply by saving credentials or booting the backend. Explicit Start authorization is bound to the current profile and a unique authorization ID, so a stopped run cannot inherit authorization from a new run.
-
-## Credentials and local storage
-
-Different browser profiles/contexts use separate random HttpOnly SameSite=Strict cookie workspaces. This is **browser isolation, not authenticated user accounts**. A shared browser profile shares its workspace. Cookies last 30 days; clearing them loses workspace access. Cross-device login, managed authentication and a multi-user database remain unimplemented.
-
-Private data is in `backend/JobChatBot.Api/App_Data/sessions/<opaque-id>/` (ignored by Git): profile/job JSON, retained resume file, application attempts and a separate persistent Edge profile per login identity. Credentials use workspace-specific ASP.NET Core Data Protection. APIs return configured/unverified flags, never secret values; successful saves clear credential fields in the UI. No keys/passwords are stored in browser localStorage/sessionStorage. Blank fields preserve saved values.
-
-Preserve `App_Data/keys` together with encrypted settings in backups. Data Protection keys depend on filesystem protection; an administrator/compromised server can access them. Resume/job files and Edge session files are not encrypted by this application. The local data root is owner-only on Unix. Do not commit or share it, and do not run multiple API instances against the JSON store.
-
-Legacy `App_Data/workspace.json` is preserved without exposing it to new browser workspaces.
-
-Optional server defaults (UI per-workspace settings take precedence):
-
-| Variable | Purpose |
-| --- | --- |
-| `LinkedIn__Email`, `LinkedIn__Password` | Optional fixed-origin LinkedIn browser login |
-| `Naukri__Email`, `Naukri__Password` | Optional fixed-origin Naukri browser login |
-| `Search__BraveApiKey` | Optional indexed search at `api.search.brave.com`; without it, public LinkedIn guest search is used |
-| `Ai__ApiKey`, `Ai__Model` | Optional OpenAI-compatible guidance |
-| `Ai__BaseUrl` | HTTPS API base, default `https://api.openai.com/v1` |
-| `Notifications__SendGridApiKey`, `Notifications__FromEmail` | SendGrid at `api.sendgrid.com` with verified sender |
-| `Notifications__WhatsAppToken`, `Notifications__WhatsAppPhoneId` | Meta Business API at `graph.facebook.com` |
-| `Notifications__WhatsAppTemplate` | Approved template with job title, company and listing URL body parameters |
-| `Notifications__WhatsAppLanguage` | Template language, default `en_US` |
-| `Notifications__DisableSending` | Server-wide notification pause |
-| `BrowserApply__Enabled` | Enable/disable Windows installed-Edge automation |
-| `DataDirectory` | Optional absolute private data root |
-
-The `http` launch profile and `scripts/dev.sh` force notification sending **paused**. The `bot` launch profile permits provider calls only when the workspace also opts in and has configured recipients/credentials. Use recipients who consent. Pending notifications are processed every ten seconds. `provider-accepted` is not final delivery; delivery webhooks and automatic retries are not implemented. AI chat sends resume text/matches to the configured provider, with dedicated email, WhatsApp and application phone fields removed; resume text may still contain personal information.
-
-Cloud network settings must allow required provider destinations and job-site login/page dependencies. This cloud instance is not configured for live Windows site automation. No real keys/accounts were supplied and no live applications/messages were sent during development.
-
-## Validate
+## Validation and limits
 
 ```bash
 dotnet build backend/JobChatBot.Api
 python3 scripts/smoke.py
-dotnet run --project backend/JobChatBot.Checks
-# Optional offline browser fixtures, using an already installed browser:
 BROWSER_TEST_EXECUTABLE=/usr/bin/chromium dotnet run --project backend/JobChatBot.Checks -- --browser
 cd frontend
 npm run build -- --configuration production
 CHROME_BIN=/usr/bin/chromium npm test -- --watch=false --karma-config karma.conf.js
 ```
 
-Tests use temporary workspaces, fake HTTP responses and locally fulfilled browser pages. They test search/credential isolation, uploads, Swagger, limits, authorization, pause/stop behavior, exact-once final clicks, changed-form rejection, receipt handling and notification creation. They **do not validate live account login, site compatibility, actual applications or provider delivery**.
+Linux cloud supports build/testing and public contact research, but cannot open the user's Windows Edge browser. `scripts/dev.sh` starts cloud development servers with notification delivery paused.
 
-## API-key-free workflow
+Offline browser fixtures exercise Naukri search-to-apply, four-year experience filtering, active-attempt preservation, recognized confirmation and single final clicks. Other checks cover authorization/stop behavior, uploads, workspace isolation, contact evidence, missing email/experience, persistence and deduplication. The supplied public LinkedIn response also parsed all ten listing cards.
 
-Save your resume, name, email, target role and location, then use **Search jobs · no key required**. Without a Brave key the backend fetches up to 25 public LinkedIn listing cards using only the target role and location. It imports real title/company/location fields, removes tracking parameters and deduplicates URLs. Matching uses card text, not full job descriptions. Results and application controls appear directly on Find jobs. Regional LinkedIn URLs such as `in.linkedin.com` are normalized to `www.linkedin.com` before applying. Keyless discovery currently retrieves LinkedIn listings; optional Brave search also discovers Naukri listings. Public access may be blocked, rate limited or change without notice; errors pause a bot run rather than inventing listings.
-
-The existing bounded auto-apply workflow requires **local Windows + installed Edge**, a job-site login, a completed profile and explicit Start Bot authorization, but no search API key. CAPTCHA, OTP and unknown form questions still require user action. Linux/cloud cannot operate your Windows browser. Live login and submissions have not been verified here.
-
-Local chat guidance and resume matching need no AI key. Optional AI responses, SendGrid email and WhatsApp delivery still require their respective provider credentials; these external services are not replaced by a script. Notification sending remains paused in the standard development workflow.
-
-Cloud keyless search requires network access to `www.linkedin.com`. Save/publish the environment network settings before expecting live discovery to work. Offline fixture tests validate parsing and error handling independently of site access. The uploaded public LinkedIn response was also checked: all 10 regional-host listing cards parsed successfully.
+**Real Naukri login, live-page selectors, live applications and real LinkedIn contact lookup have not been verified in this Linux environment.** Offline tests establish adapter behavior against fixtures, not current compatibility with an authenticated account. No real application or message was sent during development. If Naukri shows an unsupported layout, inspect that page in the visible Edge window; do not assume the bot submitted anything.
